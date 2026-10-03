@@ -162,12 +162,21 @@ def invoice_create(request):
         raise PermissionDenied
     if request.method != "POST":
         return HttpResponseBadRequest("Invoices require POST.")
+    request_key = _request_key(request)
+    if request_key is None:
+        return HttpResponseBadRequest("A valid invoice request key is required.")
+    actor = StaffProfile.objects.get(user=request.user)
 
     patient = get_object_or_404(
         Patient.objects.filter(archived_at__isnull=True),
         pk=request.POST.get("patient"),
     )
     service = get_object_or_404(Service, pk=request.POST.get("service"))
+    existing = Invoice.objects.filter(request_key=request_key).first()
+    if existing:
+        if existing.patient_id == patient.pk and existing.created_by_id == actor.pk:
+            return redirect("invoice_detail", pk=existing.pk)
+        return HttpResponse("Invoice request key already used.", status=409)
     try:
         quantity = Decimal(request.POST.get("quantity", "1"))
         unit_price = Decimal(
@@ -197,8 +206,14 @@ def invoice_create(request):
     line_total = subtotal - discount
 
     with transaction.atomic():
+        existing = Invoice.objects.filter(request_key=request_key).first()
+        if existing:
+            if existing.patient_id == patient.pk and existing.created_by_id == actor.pk:
+                return redirect("invoice_detail", pk=existing.pk)
+            return HttpResponse("Invoice request key already used.", status=409)
         invoice = Invoice.objects.create(
             number=next_number("INVOICE"),
+            request_key=request_key,
             patient=patient,
             status=Invoice.Status.ISSUED,
             subtotal=subtotal,
@@ -206,7 +221,7 @@ def invoice_create(request):
             tax_total=Decimal("0.00"),
             total=line_total,
             issued_at=timezone.now(),
-            created_by=StaffProfile.objects.get(user=request.user),
+            created_by=actor,
         )
         InvoiceLine.objects.create(
             invoice=invoice,
@@ -252,9 +267,13 @@ def invoice_detail(request, pk):
         .prefetch_related("lines")
     )
     for pharmacy_return in pharmacy_returns:
+        pharmacy_return.refund_request_key = uuid.uuid4()
         pharmacy_return.refund_total = pharmacy_return.lines.aggregate(
             total=Sum("refund_amount")
         )["total"] or Decimal("0.00")
+    payments = list(invoice.payments.all())
+    for payment in payments:
+        payment.refund_request_key = uuid.uuid4()
     return render(
         request,
         "core/billing/invoice_detail.html",
@@ -264,6 +283,10 @@ def invoice_detail(request, pk):
             "is_admin": _has_role(request.user, "Administrator"),
             "is_reception": _has_role(request.user, "Reception"),
             "payment_methods": PaymentMethod.objects.filter(is_active=True),
+            "payment_request_key": uuid.uuid4(),
+            "adjustment_request_key": uuid.uuid4(),
+            "discount_request_key": uuid.uuid4(),
+            "payments": payments,
             "can_back_to_patient": _has_role(request.user, "Reception")
             and invoice.patient_id is not None,
             "pharmacy_returns": pharmacy_returns,
@@ -312,6 +335,14 @@ def payment_create(request, pk):
 
     if request.method != "POST":
         return HttpResponseBadRequest("Payments require POST.")
+    request_key = _request_key(request)
+    if request_key is None:
+        return HttpResponseBadRequest("A valid payment request key is required.")
+    existing = Payment.objects.filter(request_key=request_key).first()
+    if existing:
+        if existing.invoice_id == int(pk):
+            return redirect("invoice_detail", pk=existing.invoice_id)
+        return HttpResponse("Payment request key already used.", status=409)
 
     method = get_object_or_404(
         PaymentMethod.objects.filter(is_active=True), pk=request.POST.get("method")
@@ -325,6 +356,11 @@ def payment_create(request, pk):
 
     with transaction.atomic():
         invoice = get_object_or_404(Invoice.objects.select_for_update(), pk=pk)
+        existing = Payment.objects.filter(request_key=request_key).first()
+        if existing:
+            if existing.invoice_id == invoice.pk:
+                return redirect("invoice_detail", pk=invoice.pk)
+            return HttpResponse("Payment request key already used.", status=409)
         if invoice.status != Invoice.Status.ISSUED or amount > _invoice_outstanding(
             invoice
         ):
@@ -332,6 +368,7 @@ def payment_create(request, pk):
 
         Payment.objects.create(
             receipt_number=next_number("RECEIPT"),
+            request_key=request_key,
             invoice=invoice,
             method=method,
             amount=amount,
@@ -347,6 +384,14 @@ def invoice_adjustment(request, pk):
     actor = _financial_actor(request)
     if request.method != "POST":
         return HttpResponseBadRequest("Adjustments require POST.")
+    request_key = _request_key(request)
+    if request_key is None:
+        return HttpResponseBadRequest("A valid adjustment request key is required.")
+    existing = Adjustment.objects.filter(request_key=request_key).first()
+    if existing:
+        if existing.invoice_id == int(pk):
+            return redirect("invoice_detail", pk=existing.invoice_id)
+        return HttpResponse("Adjustment request key already used.", status=409)
     reason = request.POST.get("reason", "").strip()
     if not reason:
         return HttpResponseBadRequest("A reason is required.")
@@ -364,6 +409,11 @@ def invoice_adjustment(request, pk):
 
     with transaction.atomic():
         invoice = get_object_or_404(Invoice.objects.select_for_update(), pk=pk)
+        existing = Adjustment.objects.filter(request_key=request_key).first()
+        if existing:
+            if existing.invoice_id == invoice.pk:
+                return redirect("invoice_detail", pk=invoice.pk)
+            return HttpResponse("Adjustment request key already used.", status=409)
         if (
             invoice.status != Invoice.Status.ISSUED
             or _invoice_outstanding(invoice) + amount < 0
@@ -371,6 +421,7 @@ def invoice_adjustment(request, pk):
             return HttpResponseBadRequest("Adjustment would make the balance invalid.")
         adjustment = Adjustment.objects.create(
             invoice=invoice,
+            request_key=request_key,
             amount=amount,
             reason=reason,
             approved_by=actor,
@@ -391,6 +442,14 @@ def invoice_refund(request, pk):
     actor = _financial_actor(request)
     if request.method != "POST":
         return HttpResponseBadRequest("Refunds require POST.")
+    request_key = _request_key(request)
+    if request_key is None:
+        return HttpResponseBadRequest("A valid refund request key is required.")
+    existing = Refund.objects.filter(request_key=request_key).first()
+    if existing:
+        if existing.payment.invoice_id == int(pk):
+            return redirect("invoice_detail", pk=pk)
+        return HttpResponse("Refund request key already used.", status=409)
     reason = request.POST.get("reason", "").strip()
     if not reason:
         return HttpResponseBadRequest("A reason is required.")
@@ -405,6 +464,11 @@ def invoice_refund(request, pk):
 
     with transaction.atomic():
         invoice = get_object_or_404(Invoice.objects.select_for_update(), pk=pk)
+        existing = Refund.objects.filter(request_key=request_key).first()
+        if existing:
+            if existing.payment.invoice_id == invoice.pk:
+                return redirect("invoice_detail", pk=invoice.pk)
+            return HttpResponse("Refund request key already used.", status=409)
         payment = get_object_or_404(
             Payment.objects.select_for_update().filter(invoice=invoice), pk=payment_id
         )
@@ -442,6 +506,7 @@ def invoice_refund(request, pk):
             )
         refund = Refund.objects.create(
             payment=payment,
+            request_key=request_key,
             amount=amount,
             reason=reason,
             status=Refund.Status.ISSUED,
@@ -622,6 +687,7 @@ def patient_detail(request, pk):
             "services": Service.objects.filter(is_active=True)
             if can_bill
             else Service.objects.none(),
+            "invoice_request_key": uuid.uuid4(),
         },
     )
 
@@ -1117,6 +1183,7 @@ def pharmacy_sale_create(request):
         total = (batch.sale_price * quantity).quantize(Decimal("0.01"))
         invoice = Invoice.objects.create(
             number=next_number("INVOICE"),
+            request_key=request_key,
             patient=None,
             status=Invoice.Status.ISSUED,
             subtotal=total,
@@ -1451,6 +1518,7 @@ def dispense_prescription(request, prescription_id):
         invoice_total = (batch.sale_price * quantity).quantize(Decimal("0.01"))
         invoice = Invoice.objects.create(
             number=next_number("INVOICE"),
+            request_key=request_key,
             patient=prescription.patient,
             status=Invoice.Status.ISSUED,
             subtotal=invoice_total,

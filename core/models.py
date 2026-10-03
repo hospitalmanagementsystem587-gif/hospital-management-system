@@ -565,6 +565,7 @@ class Invoice(TimestampedModel):
         VOIDED = "voided", "Voided"
 
     number = models.CharField(max_length=40, unique=True)
+    request_key = models.UUIDField(unique=True, null=True, blank=True)
     patient = models.ForeignKey(
         Patient,
         on_delete=models.PROTECT,
@@ -636,6 +637,7 @@ class InvoiceLine(models.Model):
 
 class Payment(TimestampedModel):
     receipt_number = models.CharField(max_length=40, unique=True)
+    request_key = models.UUIDField(unique=True, null=True, blank=True)
     invoice = models.ForeignKey(
         Invoice, on_delete=models.PROTECT, related_name="payments"
     )
@@ -669,6 +671,7 @@ class Refund(TimestampedModel):
     payment = models.ForeignKey(
         Payment, on_delete=models.PROTECT, related_name="refunds"
     )
+    request_key = models.UUIDField(unique=True, null=True, blank=True)
     pharmacy_return = models.OneToOneField(
         PharmacyReturn,
         on_delete=models.PROTECT,
@@ -713,6 +716,7 @@ class Adjustment(TimestampedModel):
     invoice = models.ForeignKey(
         Invoice, on_delete=models.PROTECT, related_name="adjustments"
     )
+    request_key = models.UUIDField(unique=True, null=True, blank=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     reason = models.TextField()
     approved_by = models.ForeignKey(

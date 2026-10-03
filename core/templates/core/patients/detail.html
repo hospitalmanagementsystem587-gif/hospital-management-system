@@ -26,6 +26,7 @@
         </ul>
         <form method="post" action="{% url 'invoice_create' %}">
           {% csrf_token %}
+          <input type="hidden" name="request_key" value="{{ invoice_request_key }}">
           <input type="hidden" name="patient" value="{{ patient.pk }}">
           <label>Service <select name="service" required>{% for service in services %}<option value="{{ service.pk }}">{{ service.name }} - {{ service.current_charge|default:"0.00" }}</option>{% endfor %}</select></label>
           <label>Quantity <input type="number" name="quantity" min="0.001" step="0.001" value="1" required></label>

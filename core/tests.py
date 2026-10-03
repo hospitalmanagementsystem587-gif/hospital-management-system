@@ -1,14 +1,23 @@
 from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor
 import re
+from threading import Barrier
+from unittest import skipUnless
 
 from django.contrib.admin.models import ADDITION, LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core import mail
-from django.db import IntegrityError, transaction
+from django.db import (
+    IntegrityError,
+    close_old_connections,
+    connection,
+    connections,
+    transaction,
+)
 from django.db.models import Sum
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -419,6 +428,7 @@ class BillingWorkflowTests(TestCase):
                 "quantity": "1",
                 "unit_price": "500.00",
                 "description": "Consultation",
+                "request_key": "00000000-0000-0000-0000-000000000016",
             },
         )
 
@@ -427,6 +437,19 @@ class BillingWorkflowTests(TestCase):
         self.assertEqual(invoice.number, "1")
         self.assertEqual(invoice.total, Decimal("500.00"))
         self.assertEqual(invoice.status, Invoice.Status.ISSUED)
+        duplicate_invoice = self.client.post(
+            reverse("invoice_create"),
+            {
+                "patient": self.patient.pk,
+                "service": self.service.pk,
+                "quantity": "1",
+                "unit_price": "500.00",
+                "description": "Consultation",
+                "request_key": "00000000-0000-0000-0000-000000000016",
+            },
+        )
+        self.assertEqual(duplicate_invoice.status_code, 302)
+        self.assertEqual(Invoice.objects.filter(patient=self.patient).count(), 1)
 
         response = self.client.post(
             reverse("payment_create", args=[invoice.pk]),
@@ -434,6 +457,7 @@ class BillingWorkflowTests(TestCase):
                 "method": self.method.pk,
                 "amount": "500.00",
                 "reference": "CASH-001",
+                "request_key": "00000000-0000-0000-0000-000000000014",
             },
         )
 
@@ -453,11 +477,38 @@ class BillingWorkflowTests(TestCase):
 
         response = self.client.post(
             reverse("payment_create", args=[invoice.pk]),
-            {"method": self.method.pk, "amount": "500.01"},
+            {
+                "method": self.method.pk,
+                "amount": "500.01",
+                "request_key": "00000000-0000-0000-0000-000000000015",
+            },
         )
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(invoice.payments.exists())
+
+    def test_duplicate_payment_submission_creates_one_receipt(self):
+        invoice = Invoice.objects.create(
+            number="DUPLICATE-PAYMENT-001",
+            patient=self.patient,
+            status=Invoice.Status.ISSUED,
+            total=Decimal("500.00"),
+        )
+        self.client.force_login(self.reception)
+        payload = {
+            "method": self.method.pk,
+            "amount": "100.00",
+            "reference": "DUPLICATE-SYNTHETIC",
+            "request_key": "00000000-0000-0000-0000-000000000013",
+        }
+        url = reverse("payment_create", args=[invoice.pk])
+
+        first = self.client.post(url, payload)
+        duplicate = self.client.post(url, payload)
+
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(duplicate.status_code, 302)
+        self.assertEqual(invoice.payments.count(), 1)
 
     def _create_administrator(self):
         user = get_user_model().objects.create_user(
@@ -484,6 +535,7 @@ class BillingWorkflowTests(TestCase):
                 "unit_price": "500.00",
                 "discount_amount": "25.00",
                 "reason": "Approved synthetic discount",
+                "request_key": "00000000-0000-0000-0000-000000000017",
             },
         )
 
@@ -519,7 +571,12 @@ class BillingWorkflowTests(TestCase):
 
         response = self.client.post(
             reverse("invoice_refund", args=[invoice.pk]),
-            {"payment": payment.pk, "amount": "50.00", "reason": "Synthetic refund"},
+            {
+                "payment": payment.pk,
+                "amount": "50.00",
+                "reason": "Synthetic refund",
+                "request_key": "00000000-0000-0000-0000-000000000018",
+            },
         )
         self.assertEqual(response.status_code, 302)
         refund = Refund.objects.get(payment=payment)
@@ -528,10 +585,26 @@ class BillingWorkflowTests(TestCase):
         self.assertEqual(
             AuditEvent.objects.filter(action="financial.refund_issued").count(), 1
         )
+        duplicate_refund = self.client.post(
+            reverse("invoice_refund", args=[invoice.pk]),
+            {
+                "payment": payment.pk,
+                "amount": "50.00",
+                "reason": "Synthetic refund",
+                "request_key": "00000000-0000-0000-0000-000000000018",
+            },
+        )
+        self.assertEqual(duplicate_refund.status_code, 302)
+        self.assertEqual(Refund.objects.filter(payment=payment).count(), 1)
 
         response = self.client.post(
             reverse("invoice_adjustment", args=[invoice.pk]),
-            {"kind": "adjustment", "amount": "20.00", "reason": "Synthetic correction"},
+            {
+                "kind": "adjustment",
+                "amount": "20.00",
+                "reason": "Synthetic correction",
+                "request_key": "00000000-0000-0000-0000-000000000019",
+            },
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
@@ -540,6 +613,17 @@ class BillingWorkflowTests(TestCase):
         self.assertEqual(
             AuditEvent.objects.filter(action="financial.adjustment_created").count(), 1
         )
+        duplicate_adjustment = self.client.post(
+            reverse("invoice_adjustment", args=[invoice.pk]),
+            {
+                "kind": "adjustment",
+                "amount": "20.00",
+                "reason": "Synthetic correction",
+                "request_key": "00000000-0000-0000-0000-000000000019",
+            },
+        )
+        self.assertEqual(duplicate_adjustment.status_code, 302)
+        self.assertEqual(Adjustment.objects.filter(invoice=invoice).count(), 1)
         self.assertEqual(
             invoice.payments.get().refunds.get().reason, "Synthetic refund"
         )
@@ -555,6 +639,7 @@ class BillingWorkflowTests(TestCase):
                 "unit_price": "500.00",
                 "discount_amount": "10.00",
                 "reason": "Unauthorized discount",
+                "request_key": "00000000-0000-0000-0000-000000000020",
             },
         )
         self.assertEqual(response.status_code, 403)
@@ -659,6 +744,118 @@ class BillingWorkflowTests(TestCase):
                 target_id=str(invoice.pk),
                 details__reason="Duplicate synthetic invoice",
             ).exists()
+        )
+
+
+@skipUnless(
+    connection.features.has_select_for_update,
+    "Concurrent row-lock tests require a database supporting SELECT FOR UPDATE.",
+)
+class ConcurrencyIntegrityTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        call_command("bootstrap_hospital", stdout=None)
+        self.pharmacy = get_user_model().objects.create_user(
+            username="concurrency-pharmacy",
+            password="Synthetic-Password-123!",
+        )
+        self.pharmacy.groups.add(Group.objects.get(name="Pharmacy"))
+        StaffProfile.objects.create(user=self.pharmacy, employee_id="CONC-PHARM-001")
+        self.patient = Patient.objects.create(
+            mrn="CONC-001", full_name="Concurrency Synthetic Patient"
+        )
+
+    def post_concurrently(self, user, url, payloads):
+        barrier = Barrier(len(payloads))
+
+        def post(payload):
+            close_old_connections()
+            try:
+                client = Client()
+                client.force_login(user)
+                barrier.wait(timeout=10)
+                return client.post(url, payload).status_code
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=len(payloads)) as pool:
+            return list(pool.map(post, payloads))
+
+    def test_concurrent_otc_sales_cannot_oversell_stock(self):
+        medicine = Medicine.objects.create(
+            code="CONC-MED-001",
+            generic_name="Concurrency Medicine",
+            unit="tablet",
+            is_otc=True,
+        )
+        supplier = Supplier.objects.create(code="CONC-SUP-001", name="Supplier")
+        receipt = StockReceipt.objects.create(
+            number="CONC-RECEIPT-001", supplier=supplier, received_at=timezone.now()
+        )
+        batch = MedicineBatch.objects.create(
+            medicine=medicine,
+            receipt=receipt,
+            batch_number="CONC-BATCH-001",
+            expiry_date="2028-12-31",
+            purchase_price=Decimal("1.00"),
+            sale_price=Decimal("2.00"),
+            quantity_received=Decimal("5"),
+            quantity_on_hand=Decimal("5"),
+        )
+        payloads = [
+            {
+                "batch": batch.pk,
+                "quantity": "4",
+                "request_key": f"00000000-0000-0000-0000-0000000000{value}",
+            }
+            for value in ("22", "23")
+        ]
+
+        statuses = self.post_concurrently(
+            self.pharmacy, reverse("pharmacy_sale_create"), payloads
+        )
+
+        self.assertEqual(sorted(statuses), [302, 400])
+        batch.refresh_from_db()
+        self.assertEqual(batch.quantity_on_hand, Decimal("1"))
+        self.assertEqual(PharmacySale.objects.count(), 1)
+        self.assertEqual(
+            StockMovement.objects.filter(kind=StockMovement.Kind.SALE).count(), 1
+        )
+
+    def test_concurrent_payments_cannot_exceed_invoice_balance(self):
+        reception = get_user_model().objects.create_user(
+            username="concurrency-reception",
+            password="Synthetic-Password-123!",
+        )
+        reception.groups.add(Group.objects.get(name="Reception"))
+        StaffProfile.objects.create(user=reception, employee_id="CONC-RECEPTION-001")
+        method = PaymentMethod.objects.create(code="CONC-CASH", name="Cash")
+        invoice = Invoice.objects.create(
+            number="CONC-INVOICE-001",
+            patient=self.patient,
+            status=Invoice.Status.ISSUED,
+            total=Decimal("100.00"),
+        )
+        payloads = [
+            {
+                "method": method.pk,
+                "amount": "60.00",
+                "request_key": f"00000000-0000-0000-0000-0000000000{value}",
+            }
+            for value in ("24", "25")
+        ]
+
+        statuses = self.post_concurrently(
+            reception, reverse("payment_create", args=[invoice.pk]), payloads
+        )
+
+        self.assertEqual(sorted(statuses), [302, 400])
+        self.assertEqual(invoice.payments.count(), 1)
+        self.assertEqual(
+            invoice.payments.get().amount,
+            Decimal("60.00"),
         )
 
 
@@ -897,6 +1094,7 @@ class PharmacyWorkflowTests(TestCase):
                 "pharmacy_return": pharmacy_return.pk,
                 "amount": "2.00",
                 "reason": "Approved synthetic return",
+                "request_key": "00000000-0000-0000-0000-000000000021",
             },
         )
 
@@ -904,6 +1102,18 @@ class PharmacyWorkflowTests(TestCase):
         pharmacy_return.refresh_from_db()
         self.assertEqual(pharmacy_return.status, PharmacyReturn.Status.APPROVED)
         self.assertEqual(pharmacy_return.refund.amount, Decimal("2.00"))
+        duplicate_refund = self.client.post(
+            reverse("invoice_refund", args=[invoice.pk]),
+            {
+                "payment": payment.pk,
+                "pharmacy_return": pharmacy_return.pk,
+                "amount": "2.00",
+                "reason": "Approved synthetic return",
+                "request_key": "00000000-0000-0000-0000-000000000021",
+            },
+        )
+        self.assertEqual(duplicate_refund.status_code, 302)
+        self.assertEqual(Refund.objects.filter(payment=payment).count(), 1)
 
     def test_otc_sales_require_approval_and_duplicate_posts_are_idempotent(self):
         batch = MedicineBatch.objects.create(
