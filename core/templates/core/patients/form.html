@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% if creating %}Register patient{% else %}Update patient{% endif %} | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}{% if creating %}Register patient{% else %}Update patient{% endif %}{% endblock %}
+{% block content %}
       <h1>{% if creating %}Register patient{% else %}Update demographics{% endif %}</h1>
       {% if duplicates %}
         <section role="alert" aria-labelledby="duplicate-heading">
@@ -30,6 +25,4 @@
         {% endif %}
       </form>
       {% if not creating %}<p><a href="{% url 'patient_detail' patient.pk %}">Cancel</a></p>{% endif %}
-    </main>
-  </body>
-</html>
+{% endblock %}

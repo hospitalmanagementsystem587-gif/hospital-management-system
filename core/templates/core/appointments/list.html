@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Appointments | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Appointments{% endblock %}
+{% block content %}
       <h1>{% if is_doctor %}My schedule{% else %}Appointments{% endif %}</h1>
       <form method="get">
         <label for="schedule-date">Date</label>
@@ -33,8 +28,8 @@
                   <form method="post" action="{% url 'appointment_transition' appointment.pk %}">
                     {% csrf_token %}
                     {% if appointment.status == 'scheduled' %}<button name="action" value="check_in">Check in</button>{% endif %}
-                    <button name="action" value="cancel">Cancel</button>
-                    <button name="action" value="no_show">No-show</button>
+                    <button name="action" value="cancel" onclick="return confirm('Cancel this appointment?')">Cancel</button>
+                    {% if appointment.status == 'scheduled' %}<button name="action" value="no_show" onclick="return confirm('Mark this appointment as no-show?')">No-show</button>{% endif %}
                   </form>
                 {% endif %}
                 {% if is_doctor and appointment.status == 'checked_in' or is_doctor and appointment.status == 'in_progress' %}
@@ -62,6 +57,4 @@
           <li>No checked-in patients waiting.</li>
         {% endfor %}
       </ol>
-    </main>
-  </body>
-</html>
+{% endblock %}

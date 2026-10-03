@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Consultation | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Consultation{% endblock %}
+{% block content %}
       <h1>Consultation</h1>
       <p>{{ consultation.patient.mrn }} — {{ consultation.patient.full_name }}</p>
       <p>Doctor: {{ consultation.doctor.user.get_full_name|default:consultation.doctor.user.username }}</p>
@@ -27,6 +22,4 @@
         {% endfor %}
       </ul>
       <p><a href="{% url 'clinical_history' consultation.patient.pk %}">Back to clinical history</a></p>
-    </main>
-  </body>
-</html>
+{% endblock %}

@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Clinical history | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Clinical history{% endblock %}
+{% block content %}
       <h1>Clinical history</h1>
       <p>{{ patient.mrn }} — {{ patient.full_name }}</p>
       <p>Allergy/safety information: {{ patient.allergy_safety_notes|default:"No safety information recorded" }}</p>
@@ -19,6 +14,4 @@
         {% endfor %}
       </ul>
       <p><a href="{% url 'patient_detail' patient.pk %}">Back to patient</a></p>
-    </main>
-  </body>
-</html>
+{% endblock %}

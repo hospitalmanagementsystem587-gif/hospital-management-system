@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Invoice {{ invoice.number }} | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Invoice {{ invoice.number }}{% endblock %}
+{% block content %}
       <h1>Invoice {{ invoice.number }}</h1>
       <p>{% if invoice.patient %}{{ invoice.patient.full_name }} ({{ invoice.patient.mrn }}){% else %}Walk-in sale{% endif %}</p>
       <p>Status: {{ invoice.get_status_display }}</p>
@@ -51,7 +46,7 @@
             <p>{{ pharmacy_return.reason }}</p>
             <ul>{% for line in pharmacy_return.lines.all %}<li>{% if line.sale_line %}Sale line {{ line.sale_line_id }}{% else %}Dispensing line {{ line.dispensing_line_id }}{% endif %}: {{ line.quantity }} units, {{ line.refund_amount }}</li>{% endfor %}</ul>
             {% if is_admin and payments %}
-              <form method="post" action="{% url 'invoice_refund' invoice.pk %}">
+              <form method="post" action="{% url 'invoice_refund' invoice.pk %}" onsubmit="return confirm('Issue this pharmacy return refund?')">
                 {% csrf_token %}
                 <input type="hidden" name="request_key" value="{{ pharmacy_return.refund_request_key }}">
                 <input type="hidden" name="pharmacy_return" value="{{ pharmacy_return.pk }}">
@@ -62,7 +57,7 @@
               </form>
             {% endif %}
             {% if is_admin %}
-              <form method="post" action="{% url 'pharmacy_return_reject' pharmacy_return.pk %}">
+              <form method="post" action="{% url 'pharmacy_return_reject' pharmacy_return.pk %}" onsubmit="return confirm('Reject this return request?')">
                 {% csrf_token %}
                 <label>Rejection reason <input name="reason" required></label>
                 <button type="submit">Reject return</button>
@@ -103,7 +98,7 @@
           <button type="submit">Record adjustment</button>
         </form>
         {% for payment in payments %}
-          <form method="post" action="{% url 'invoice_refund' invoice.pk %}">
+          <form method="post" action="{% url 'invoice_refund' invoice.pk %}" onsubmit="return confirm('Issue this refund?')">
             {% csrf_token %}
             <input type="hidden" name="request_key" value="{{ payment.refund_request_key }}">
             <input type="hidden" name="payment" value="{{ payment.pk }}">
@@ -113,7 +108,7 @@
           </form>
         {% endfor %}
         {% if can_void %}
-          <form method="post" action="{% url 'invoice_void' invoice.pk %}">
+          <form method="post" action="{% url 'invoice_void' invoice.pk %}" onsubmit="return confirm('Void this invoice? This action is recorded in the audit log.')">
             {% csrf_token %}
             <label>Void reason <input name="reason" required></label>
             <button type="submit">Void invoice</button>
@@ -121,6 +116,4 @@
         {% endif %}
       {% endif %}
       {% if can_back_to_patient %}<p><a href="{% url 'patient_detail' invoice.patient_id %}">Back to patient</a></p>{% endif %}
-    </main>
-  </body>
-</html>
+{% endblock %}

@@ -1,28 +1,15 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Hospital Management System</title>
-  </head>
-  <body>
-    <main>
-      <h1>{{ hospital.name|default:"Hospital Management System" }}</h1>
-      <p>The application foundation is ready.</p>
-      {% if user.is_authenticated %}
-        <p>Signed in as {{ user.get_username }}</p>
-        {% if perms.core.view_patient %}<p><a href="{% url 'patient_list' %}">Patients</a></p>{% endif %}
-        {% if perms.core.view_appointment %}<p><a href="{% url 'appointment_list' %}">Appointments</a></p>{% endif %}
-        {% if perms.core.view_invoice %}<p><a href="{% url 'invoice_list' %}">Invoices</a></p>{% endif %}
-        {% if is_pharmacy %}<p><a href="{% url 'pharmacy_prescription_list' %}">Prescriptions for dispensing</a></p>{% endif %}
-        <p><a href="{% url 'password_change' %}">Change password</a></p>
-        <form method="post" action="{% url 'logout' %}">
-          {% csrf_token %}
-          <button type="submit">Sign out</button>
-        </form>
-      {% else %}
-        <p><a href="{% url 'login' %}">Staff sign in</a></p>
-      {% endif %}
-    </main>
-  </body>
-</html>
+{% extends "core/base.html" %}
+
+{% block title %}Overview{% endblock %}
+{% block content %}
+  <h1>{{ hospital.name|default:"Hospital Management System" }}</h1>
+  {% if user.is_authenticated %}
+    <p>Signed in as {{ user.get_username }}</p>
+    {% if is_reception %}<p><a href="{% url 'patient_list' %}">Patients</a></p>{% endif %}
+    {% if is_reception or is_doctor %}<p><a href="{% url 'appointment_list' %}">Appointments</a></p>{% endif %}
+    {% if is_pharmacy %}<p><a href="{% url 'pharmacy_prescription_list' %}">Prescriptions for dispensing</a></p>{% endif %}
+    {% if is_reception or is_administrator %}<p><a href="{% url 'invoice_list' %}">Invoices</a></p>{% endif %}
+  {% else %}
+    <p><a href="{% url 'login' %}">Staff sign in</a></p>
+  {% endif %}
+{% endblock %}

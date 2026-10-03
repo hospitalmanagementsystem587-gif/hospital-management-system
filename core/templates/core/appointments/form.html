@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% if creating %}Book appointment{% else %}Reschedule appointment{% endif %} | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}{% if creating %}Book appointment{% else %}Reschedule appointment{% endif %}{% endblock %}
+{% block content %}
       <h1>{% if creating %}Book appointment{% else %}Reschedule appointment{% endif %}</h1>
       <form method="post">
         {% csrf_token %}
@@ -14,6 +9,4 @@
         <button type="submit">{% if creating %}Book appointment{% else %}Save schedule{% endif %}</button>
       </form>
       <p><a href="{% url 'appointment_list' %}">Cancel</a></p>
-    </main>
-  </body>
-</html>
+{% endblock %}

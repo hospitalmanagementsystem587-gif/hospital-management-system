@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dispensing prescriptions | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Dispensing prescriptions{% endblock %}
+{% block content %}
       <h1>Dispensing prescriptions</h1>
       <form method="get" role="search">
         <label for="prescription-query">Search prescription ID, patient ID, or name</label>
@@ -96,7 +91,7 @@
                 </form>
               </td>
               <td>
-                <form method="post" action="{% url 'batch_quarantine' batch.pk %}">
+                <form method="post" action="{% url 'batch_quarantine' batch.pk %}" onsubmit="return confirm('Change the quarantine status for this batch?')">
                   {% csrf_token %}
                   <input type="hidden" name="request_key" value="{{ batch.quarantine_request_key }}">
                   <input type="hidden" name="is_quarantined" value="{{ batch.is_quarantined|yesno:'false,true' }}">
@@ -108,6 +103,4 @@
           {% empty %}<tr><td colspan="7">No batches recorded.</td></tr>{% endfor %}
         </tbody>
       </table>
-    </main>
-  </body>
-</html>
+{% endblock %}

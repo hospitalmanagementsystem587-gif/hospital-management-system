@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sale {{ sale.number }} | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Sale {{ sale.number }}{% endblock %}
+{% block content %}
       <h1>Pharmacy sale {{ sale.number }}</h1>
       <p>Status: {{ sale.get_status_display }}</p>
       <p>Ledger invoice: {{ sale.invoice.number }} · {{ sale.invoice.total }}</p>
@@ -37,6 +32,4 @@
         </tbody>
       </table>
       <p><a href="{% url 'pharmacy_prescription_list' %}">Back to pharmacy</a></p>
-    </main>
-  </body>
-</html>
+{% endblock %}

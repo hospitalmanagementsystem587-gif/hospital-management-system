@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Patients | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Patients{% endblock %}
+{% block content %}
       <h1>Patients</h1>
       <form method="get" role="search">
         <label for="patient-query">Search by patient ID, name, or phone</label>
@@ -31,6 +26,4 @@
           {% endfor %}
         </tbody>
       </table>
-    </main>
-  </body>
-</html>
+{% endblock %}

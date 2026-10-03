@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Invoices | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Invoices{% endblock %}
+{% block content %}
       <h1>Invoices</h1>
       <form method="get" role="search">
         <label for="invoice-query">Search invoice, patient ID, or name</label>
@@ -28,6 +23,4 @@
         </tbody>
       </table>
       <p><a href="{% url 'home' %}">Back to home</a></p>
-    </main>
-  </body>
-</html>
+{% endblock %}

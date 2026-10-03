@@ -1,15 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Prescription {{ prescription.number }} | Hospital Management System</title>
-    <style>
-      @media print { button { display: none; } body { font: 12pt serif; } }
-    </style>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Prescription {{ prescription.number }}{% endblock %}
+{% block content %}
       <h1>Prescription</h1>
       <p>Prescription ID: {{ prescription.number }}</p>
       <p>Patient: {{ prescription.patient.mrn }} — {{ prescription.patient.full_name }}</p>
@@ -26,6 +18,4 @@
         </tbody>
       </table>
       <button type="button" onclick="window.print()">Print</button>
-    </main>
-  </body>
-</html>
+{% endblock %}

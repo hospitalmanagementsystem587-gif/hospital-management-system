@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Hospital Management System{% endblock %} | Hospital Management System</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", sans-serif;
+        color: #17242b;
+        background: #f3f6f5;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; }
+      .site-header { background: #163b3a; color: #fff; }
+      .site-bar { max-width: 1200px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+      .brand { color: #fff; font-size: 1.05rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+      .site-nav { display: flex; align-items: center; gap: 6px; flex: 1; flex-wrap: wrap; }
+      .site-nav a, .site-account a { color: #e5f0ed; padding: 8px 10px; text-decoration: none; border-radius: 4px; }
+      .site-nav a:hover, .site-account a:hover { background: #285653; color: #fff; }
+      .site-account { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+      .site-account form { margin: 0; }
+      .site-account button { border: 1px solid #b7d2cd; border-radius: 4px; background: transparent; color: #fff; padding: 7px 10px; cursor: pointer; }
+      main { width: min(1200px, 100% - 32px); margin: 24px auto 48px; }
+      h1 { margin-top: 0; font-size: 1.7rem; }
+      h2 { margin-top: 28px; font-size: 1.2rem; }
+      a { color: #075e67; }
+      button, input, select, textarea { font: inherit; }
+      button { cursor: pointer; border: 1px solid #135d60; border-radius: 4px; background: #135d60; color: #fff; padding: 8px 12px; }
+      button:hover { background: #0b494c; }
+      button:disabled { cursor: not-allowed; opacity: .55; }
+      input, select, textarea { max-width: 100%; min-height: 38px; border: 1px solid #98aaa9; border-radius: 4px; background: #fff; color: #17242b; padding: 7px 9px; }
+      textarea { min-height: 80px; }
+      input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #f0b64b; outline-offset: 2px; }
+      label { display: inline-flex; flex-direction: column; gap: 4px; margin: 5px 10px 5px 0; }
+      table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; background: #fff; }
+      th, td { padding: 10px 12px; border-bottom: 1px solid #d5dfdd; text-align: left; vertical-align: top; }
+      th { background: #e6efed; font-weight: 650; }
+      tr:last-child td { border-bottom: 0; }
+      form { margin: 12px 0; }
+      form p { display: grid; grid-template-columns: minmax(130px, 190px) minmax(0, 1fr); align-items: start; gap: 8px 14px; }
+      form p label { margin: 0; }
+      ul.errorlist { color: #9a2525; }
+      .notice { margin: 14px 0; padding: 10px 12px; border-left: 4px solid #16806f; background: #e2f2ed; }
+      .notice.error { border-color: #aa3434; background: #fbe9e7; }
+      .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      @media (max-width: 700px) {
+        .site-bar { align-items: flex-start; gap: 8px; }
+        .site-nav { order: 3; flex-basis: 100%; }
+        .site-account { margin-left: auto; }
+        main { width: min(100% - 20px, 1200px); margin-top: 16px; }
+        table { display: block; overflow-x: auto; white-space: nowrap; }
+        form p { grid-template-columns: 1fr; }
+      }
+      @media print {
+        :root, body { background: #fff; color: #000; font-family: serif; }
+        .site-header, .no-print, button, form, nav { display: none !important; }
+        main { width: auto; margin: 0; }
+        table { break-inside: avoid; }
+        th { background: #eee !important; print-color-adjust: exact; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header no-print">
+      <div class="site-bar">
+        <a class="brand" href="{% url 'home' %}">Hospital Management System</a>
+        {% if user.is_authenticated %}
+          <nav class="site-nav" aria-label="Main navigation">
+            <a href="{% url 'home' %}">Overview</a>
+            {% if is_reception %}
+              <a href="{% url 'patient_list' %}">Patients</a>
+              <a href="{% url 'appointment_list' %}">Appointments</a>
+              <a href="{% url 'invoice_list' %}">Invoices</a>
+            {% endif %}
+            {% if is_doctor %}<a href="{% url 'appointment_list' %}">My schedule</a>{% endif %}
+            {% if is_pharmacy %}<a href="{% url 'pharmacy_prescription_list' %}">Pharmacy</a>{% endif %}
+            {% if is_administrator %}<a href="{% url 'invoice_list' %}">Invoices</a>{% endif %}
+          </nav>
+          <div class="site-account">
+            <span>{{ user.get_username }}</span>
+            <a href="{% url 'password_change' %}">Password</a>
+            <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+          </div>
+        {% endif %}
+      </div>
+    </header>
+    {% if messages %}
+      <div class="site-bar" aria-live="polite">
+        {% for message in messages %}<div class="notice{% if message.tags == 'error' %} error{% endif %}" role="status">{{ message }}</div>{% endfor %}
+      </div>
+    {% endif %}
+    <main>{% block content %}{% endblock %}</main>
+  </body>
+</html>

@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Consultation | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}Consultation{% endblock %}
+{% block content %}
       <h1>Consultation</h1>
       <p>{{ appointment.patient.mrn }} — {{ appointment.patient.full_name }}</p>
       <p>Allergy/safety information: {{ appointment.patient.allergy_safety_notes|default:"No safety information recorded" }}</p>
@@ -20,6 +15,4 @@
         </fieldset>
         <button type="submit">Save consultation</button>
       </form>
-    </main>
-  </body>
-</html>
+{% endblock %}

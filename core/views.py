@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 import uuid
 
+from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
@@ -239,6 +240,7 @@ def invoice_create(request):
                 invoice,
                 {"amount": str(discount), "reason": reason},
             )
+    messages.success(request, "Invoice issued.")
     return redirect("invoice_detail", pk=invoice.pk)
 
 
@@ -376,6 +378,7 @@ def payment_create(request, pk):
             received_by=StaffProfile.objects.get(user=request.user),
             received_at=timezone.now(),
         )
+    messages.success(request, "Payment recorded.")
     return redirect("invoice_detail", pk=invoice.pk)
 
 
@@ -434,6 +437,7 @@ def invoice_adjustment(request, pk):
             adjustment,
             {"invoice_id": invoice.pk, "amount": str(amount), "reason": reason},
         )
+    messages.success(request, "Financial adjustment recorded.")
     return redirect("invoice_detail", pk=invoice.pk)
 
 
@@ -529,6 +533,7 @@ def invoice_refund(request, pk):
                 "reason": reason,
             },
         )
+    messages.success(request, "Refund issued.")
     return redirect("invoice_detail", pk=invoice.pk)
 
 
@@ -598,6 +603,7 @@ def invoice_void(request, pk):
             invoice,
             {"reason": reason},
         )
+    messages.success(request, "Invoice voided.")
     return redirect("invoice_detail", pk=invoice.pk)
 
 
@@ -660,6 +666,7 @@ def patient_create(request):
                 _audit_patient_change(
                     request, patient, "patient.created", form.changed_data
                 )
+            messages.success(request, "Patient registered.")
             return redirect("patient_detail", pk=patient.pk)
 
     return render(
@@ -709,6 +716,7 @@ def patient_update(request, pk):
                 _audit_patient_change(
                     request, patient, "patient.demographics_updated", changed_fields
                 )
+            messages.success(request, "Patient details updated.")
         return redirect("patient_detail", pk=patient.pk)
 
     return render(
@@ -800,6 +808,7 @@ def appointment_create(request):
             )
         else:
             if not form.errors:
+                messages.success(request, "Appointment booked.")
                 return redirect("appointment_list")
     return render(
         request,
@@ -849,6 +858,7 @@ def appointment_reschedule(request, pk):
             )
         else:
             if not form.errors:
+                messages.success(request, "Appointment rescheduled.")
                 return redirect("appointment_list")
     return render(
         request,
@@ -917,6 +927,7 @@ def appointment_transition(request, pk):
             "appointment.status_changed",
             {"from": previous_status, "to": next_status},
         )
+    messages.success(request, "Appointment status updated.")
     return redirect("appointment_list")
 
 
@@ -1010,6 +1021,7 @@ def consultation_create(request, appointment_id):
             if existing is None:
                 raise
             return redirect("consultation_detail", pk=existing.pk)
+        messages.success(request, "Consultation saved.")
         return redirect("consultation_detail", pk=consultation.pk)
 
     return render(
@@ -1138,6 +1150,7 @@ def stock_receipt_create(request):
             request_key=request_key,
             actor=StaffProfile.objects.get(user=request.user),
         )
+    messages.success(request, "Stock receipt recorded.")
     return redirect("pharmacy_prescription_list")
 
 
@@ -1235,6 +1248,7 @@ def pharmacy_sale_create(request):
             target_id=str(sale.pk),
             details={"invoice_id": invoice.pk, "line_id": line.pk},
         )
+    messages.success(request, "OTC sale recorded in the invoice ledger.")
     return redirect("pharmacy_sale_detail", pk=sale.pk)
 
 
@@ -1364,6 +1378,7 @@ def pharmacy_return_create(request):
                 "reason": reason,
             },
         )
+    messages.success(request, "Return request recorded for Administrator review.")
     return redirect(
         redirect_url[0], **({"pk": redirect_url[1]} if redirect_url[1] else {})
     )
@@ -1567,6 +1582,7 @@ def dispense_prescription(request, prescription_id):
             request_key=request_key,
             actor=actor,
         )
+    messages.success(request, "Stock adjustment recorded.")
     return redirect("pharmacy_prescription_list")
 
 

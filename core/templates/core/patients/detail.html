@@ -1,12 +1,7 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ patient.mrn }} | Hospital Management System</title>
-  </head>
-  <body>
-    <main>
+{% extends "core/base.html" %}
+
+{% block title %}{{ patient.mrn }}{% endblock %}
+{% block content %}
       <h1>{{ patient.full_name }}</h1>
       <dl>
         <dt>Patient ID</dt><dd>{{ patient.mrn }}</dd>
@@ -35,6 +30,4 @@
         </form>
       {% endif %}
       <p><a href="{% url 'patient_list' %}">Back to patients</a></p>
-    </main>
-  </body>
-</html>
+{% endblock %}
