@@ -1,15 +1,77 @@
 {% extends "core/base.html" %}
 
 {% block title %}Overview{% endblock %}
+{% block breadcrumb %}Overview{% endblock %}
+
 {% block content %}
-  <h1>{{ hospital.name|default:"Hospital Management System" }}</h1>
+  <section style="margin-bottom:26px;">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+      <div>
+        <div class="status-badge">Staff workspace</div>
+        <h1 class="page-title" style="margin-top:10px;">Welcome back{% if user.is_authenticated %}, {{ user.get_username }}{% endif %}</h1>
+        <p style="max-width:680px;margin:10px 0 0;">A focused workspace for reception, doctors, pharmacy, and administration. Use the areas below for the work you need to complete.</p>
+      </div>
+      <div class="muted" style="font-size:13px;">{{ hospital.name|default:"Hospital Management System" }}</div>
+    </div>
+  </section>
+
   {% if user.is_authenticated %}
-    <p>Signed in as {{ user.get_username }}</p>
-    {% if is_reception %}<p><a href="{% url 'patient_list' %}">Patients</a></p>{% endif %}
-    {% if is_reception or is_doctor %}<p><a href="{% url 'appointment_list' %}">Appointments</a></p>{% endif %}
-    {% if is_pharmacy %}<p><a href="{% url 'pharmacy_prescription_list' %}">Prescriptions for dispensing</a></p>{% endif %}
-    {% if is_reception or is_administrator %}<p><a href="{% url 'invoice_list' %}">Invoices</a></p>{% endif %}
+    <section class="card-grid" aria-label="Work areas">
+      {% if is_reception %}
+        <a class="card" href="{% url 'patient_list' %}">
+          <div class="card-icon">P</div>
+          <h3>Patients</h3>
+          <p>Register patients, find records, review permitted demographics, and update contact details.</p>
+        </a>
+        <a class="card" href="{% url 'appointment_list' %}">
+          <div class="card-icon">A</div>
+          <h3>Appointments & queue</h3>
+          <p>Book appointments, check patients in, manage the day's queue, and handle schedule changes.</p>
+        </a>
+        <a class="card" href="{% url 'invoice_list' %}">
+          <div class="card-icon">₹</div>
+          <h3>Billing</h3>
+          <p>Find invoices, review balances, record ordinary payments, and print receipts.</p>
+        </a>
+      {% endif %}
+
+      {% if is_doctor %}
+        <a class="card" href="{% url 'appointment_list' %}">
+          <div class="card-icon">D</div>
+          <h3>My schedule</h3>
+          <p>See today's appointments, manage the consultation flow, and open authorized encounters.</p>
+        </a>
+      {% endif %}
+
+      {% if is_pharmacy %}
+        <a class="card" href="{% url 'pharmacy_prescription_list' %}">
+          <div class="card-icon">Rx</div>
+          <h3>Pharmacy</h3>
+          <p>Dispense prescriptions, handle approved counter sales, manage stock, and process returns.</p>
+        </a>
+      {% endif %}
+
+      {% if is_administrator %}
+        <a class="card" href="{% url 'invoice_list' %}">
+          <div class="card-icon">₹</div>
+          <h3>Financial oversight</h3>
+          <p>Review invoices and controlled financial activity without opening unrestricted clinical access.</p>
+        </a>
+      {% endif %}
+    </section>
+
+    {% if not is_reception and not is_doctor and not is_pharmacy and not is_administrator %}
+      <div class="empty-state">
+        <strong>No workspace is assigned to this account.</strong>
+        <p>Please contact an administrator to receive the appropriate hospital role.</p>
+      </div>
+    {% endif %}
   {% else %}
-    <p><a href="{% url 'login' %}">Staff sign in</a></p>
+    <div class="card" style="max-width:620px;">
+      <div class="card-icon">+</div>
+      <h3>Staff sign in</h3>
+      <p>Access the hospital workspace with your individual staff account.</p>
+      <p style="margin-top:16px;"><a class="button" href="{% url 'login' %}">Sign in</a></p>
+    </div>
   {% endif %}
 {% endblock %}
