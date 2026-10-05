@@ -2599,7 +2599,7 @@ h1, h2, h3, h4, .brand-title, .kpi-metric {
 .login-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(430px, 0.92fr) minmax(520px, 1.08fr);
+  grid-template-columns: minmax(320px, 0.95fr) minmax(360px, 1.05fr);
 }
 
 .login-brand-panel {
@@ -2891,26 +2891,48 @@ h1, h2, h3, h4, .brand-title, .kpi-metric {
   text-align: center;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 768px) {
   .login-shell { grid-template-columns: 1fr; }
-  .login-brand-panel { min-height: auto; padding: 24px 28px; }
-  .login-brand-content { margin: 54px 0 42px; padding: 0; }
-  .login-brand-content h1 { font-size: clamp(2.4rem, 8vw, 4rem); }
+  .login-brand-panel {
+    min-height: auto;
+    padding: 20px 24px;
+  }
+  .login-brand-content {
+    margin: 12px 0 16px;
+    padding: 0;
+  }
+  .login-brand-content h1 {
+    font-size: 1.65rem;
+    margin: 8px 0;
+    line-height: 1.2;
+  }
+  .login-brand-content > p {
+    font-size: 0.82rem;
+    line-height: 1.4;
+    display: none;
+  }
   .login-workflow { display: none; }
-  .login-form-panel { min-height: auto; padding: 48px 28px 24px; }
-  .login-form-wrap { max-width: 520px; }
-  .login-back-link { margin-bottom: 48px; }
-  .login-form-footer { margin-top: 60px; }
+  .login-brand-footer { display: none; }
+  .login-form-panel {
+    min-height: auto;
+    padding: 28px 24px 24px;
+  }
+  .login-form-wrap { max-width: 480px; }
+  .login-back-link { margin-bottom: 20px; }
+  .login-heading { margin-bottom: 22px; }
+  .login-heading h2 { font-size: 1.6rem; margin: 0 0 4px; }
+  .login-security-icon { width: 36px; height: 36px; margin-bottom: 12px; }
+  .login-help { margin-top: 18px; padding: 10px 12px; }
+  .login-form-footer { margin-top: 24px; padding-top: 16px; }
 }
 
 @media (max-width: 560px) {
-  .login-brand-panel { padding: 20px; }
+  .login-brand-panel { padding: 16px 18px; }
   .login-network-status { display: none; }
-  .login-brand-content { margin: 44px 0 28px; }
-  .login-brand-content h1 { font-size: 2.55rem; }
-  .login-brand-content > p { font-size: 0.86rem; }
-  .login-brand-footer { align-items: flex-start; flex-direction: column; }
-  .login-form-panel { padding: 36px 20px 22px; }
+  .login-brand-content { margin: 8px 0 10px; }
+  .login-brand-content h1 { font-size: 1.4rem; }
+  .login-form-panel { padding: 22px 18px 20px; }
+  .login-heading h2 { font-size: 1.45rem; }
 }
 
 /* Appointment booking workspace */
