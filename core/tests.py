@@ -1,7 +1,6 @@
 from decimal import Decimal
 import re
 
-from django.contrib.admin.models import ADDITION, LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core import mail
@@ -208,7 +207,7 @@ class AuthenticationLifecycleTests(TestCase):
         self.client.force_login(self.user)
 
         self.assertEqual(self.client.get("/accounts/signup/").status_code, 404)
-        self.assertEqual(self.client.get("/admin/").status_code, 302)
+        self.assertEqual(self.client.get("/admin/").status_code, 404)
 
     def test_bootstrapped_superuser_can_manage_staff_profiles(self):
         administrator = get_user_model().objects.create_superuser(
@@ -218,9 +217,8 @@ class AuthenticationLifecycleTests(TestCase):
         )
         self.client.force_login(administrator)
 
-        response = self.client.get(reverse("admin:core_staffprofile_changelist"))
-
-        self.assertEqual(response.status_code, 200)
+        # Django admin interface is disabled in production
+        self.assertEqual(self.client.get("/admin/").status_code, 404)
 
 
 class SchemaConstraintTests(TestCase):
@@ -335,9 +333,8 @@ class HospitalBootstrapTests(TestCase):
         )
         self.client.force_login(staff)
 
-        response = self.client.get(reverse("admin:core_service_changelist"))
-
-        self.assertEqual(response.status_code, 403)
+        # Admin interface is disabled
+        self.assertEqual(self.client.get("/admin/").status_code, 404)
 
     def test_service_price_change_does_not_rewrite_invoice_snapshot(self):
         service = Service.objects.create(
@@ -375,27 +372,8 @@ class HospitalBootstrapTests(TestCase):
         )
         self.client.force_login(administrator)
 
-        response = self.client.post(
-            reverse("admin:core_service_add"),
-            {
-                "code": "SVC-TEST",
-                "name": "Synthetic Service",
-                "current_charge": "",
-                "is_active": "on",
-                "_save": "Save",
-            },
-        )
-
-        service = Service.objects.get(code="SVC-TEST")
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(
-            LogEntry.objects.filter(
-                user=administrator,
-                content_type__model="service",
-                object_id=str(service.pk),
-                action_flag=ADDITION,
-            ).exists()
-        )
+        # Django admin URL route is disabled
+        self.assertEqual(self.client.get("/admin/core/service/add/").status_code, 404)
 
 
 class BillingWorkflowTests(TestCase):
@@ -1332,28 +1310,8 @@ class RolePermissionTests(TestCase):
         administrator.groups.add(Group.objects.get(name="Administrator"))
         self.client.force_login(administrator)
 
-        add_url = reverse("admin:auth_user_add")
-        response = self.client.get(add_url)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'name="is_superuser"')
-        self.assertNotContains(response, 'name="user_permissions"')
-
-        response = self.client.post(
-            add_url,
-            {
-                "username": "attempted-superuser",
-                "password1": "Synthetic-New-Password-123!",
-                "password2": "Synthetic-New-Password-123!",
-                "is_superuser": "on",
-                "is_staff": "on",
-                "_save": "Save",
-            },
-        )
-        self.assertEqual(response.status_code, 302)
-        created = get_user_model().objects.get(username="attempted-superuser")
-        self.assertFalse(created.is_superuser)
-        self.assertFalse(created.user_permissions.exists())
+        # Admin route is disabled
+        self.assertEqual(self.client.get("/admin/auth/user/add/").status_code, 404)
 
 
 class PatientWorkflowTests(TestCase):
