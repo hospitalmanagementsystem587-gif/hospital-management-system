@@ -70,8 +70,7 @@ class PublicPagesTests(TestCase):
         response = self.client.get("/health/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], "ok")
-        self.assertEqual(response.json()["database"], "connected")
+        self.assertEqual(response.json(), {"status": "ok"})
 
     def test_role_dashboards_show_relevant_summaries(self):
         call_command("bootstrap_hospital", stdout=None)

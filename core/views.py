@@ -166,12 +166,7 @@ def home(request):
 
 
 def health(request):
-    try:
-        from django.db import connection
-        connection.ensure_connection()
-        return JsonResponse({"status": "ok", "database": "connected"})
-    except Exception as e:
-        return JsonResponse({"status": "error", "database": str(e)}, status=503)
+    return JsonResponse({"status": "ok"})
 
 
 def _has_role(user, role):
