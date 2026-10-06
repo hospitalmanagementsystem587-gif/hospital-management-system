@@ -207,33 +207,21 @@ class OnboardingClaimPatientView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            patient = Patient.objects.get(mrn=mrn)
-        except Patient.DoesNotExist:
+        patient = Patient.objects.filter(mrn=mrn).first()
+        patient_phone = (patient.phone or "").strip().lower() if patient else ""
+        patient_email = (patient.email or "").strip().lower() if patient else ""
+
+        # Uniform error response for nonexistent MRN or non-matching contact to prevent MRN enumeration
+        if not patient or (contact != patient_phone and contact != patient_email):
             return Response(
                 {
                     "error": {
                         "status_code": status.HTTP_404_NOT_FOUND,
-                        "message": "Matching patient record not found. Please contact hospital reception.",
+                        "message": "Patient record with provided MRN and verified contact could not be verified. Please contact hospital reception.",
                         "details": {},
                     }
                 },
                 status=status.HTTP_404_NOT_FOUND,
-            )
-
-        # Verify contact matches patient record
-        patient_phone = (patient.phone or "").strip().lower()
-        patient_email = (patient.email or "").strip().lower()
-        if contact != patient_phone and contact != patient_email:
-            return Response(
-                {
-                    "error": {
-                        "status_code": status.HTTP_400_BAD_REQUEST,
-                        "message": "Provided contact does not match the patient file on record.",
-                        "details": {},
-                    }
-                },
-                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Ensure patient does not already have an active linked account

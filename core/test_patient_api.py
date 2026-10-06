@@ -113,8 +113,6 @@ class PatientApiTests(TransactionTestCase):
 
         # NumberSequence for PATIENT MRN
         from core.models import NumberSequence
-        from django.core.cache import cache
-        cache.clear()
         NumberSequence.objects.get_or_create(code="PATIENT", defaults={"prefix": "P-", "next_value": 1})
 
     def _auth(self, user):

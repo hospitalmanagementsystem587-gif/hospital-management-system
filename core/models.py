@@ -957,6 +957,8 @@ class PatientAccount(TimestampedModel):
     is_verified = models.BooleanField(default=False)
     phone_verified = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
+    identity_provider = models.CharField(max_length=64, blank=True)
+    id_document_reference = models.CharField(max_length=128, blank=True)
     terms_version_accepted = models.CharField(max_length=32, blank=True)
     terms_accepted_at = models.DateTimeField(null=True, blank=True)
 
@@ -972,7 +974,8 @@ class PatientVerificationChallenge(TimestampedModel):
 
     contact = models.CharField(max_length=120)  # Phone or email
     purpose = models.CharField(max_length=32, choices=Purpose.choices)
-    code_hash = models.CharField(max_length=128)  # SHA-256 hash of OTP code
+    salt = models.CharField(max_length=64, blank=True)
+    code_hash = models.CharField(max_length=128)  # Salted hash of OTP code
     expires_at = models.DateTimeField()
     attempts_count = models.PositiveSmallIntegerField(default=0)
     is_used = models.BooleanField(default=False)
