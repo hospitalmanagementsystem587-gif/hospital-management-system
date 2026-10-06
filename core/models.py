@@ -955,7 +955,38 @@ class PatientAccount(TimestampedModel):
         related_name="account",
     )
     is_verified = models.BooleanField(default=False)
+    phone_verified = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
+    terms_version_accepted = models.CharField(max_length=32, blank=True)
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Account for {self.patient.full_name} ({self.user.username})"
+
+
+class PatientVerificationChallenge(TimestampedModel):
+    class Purpose(models.TextChoices):
+        REGISTRATION = "registration", "Registration"
+        CLAIM_PATIENT = "claim_patient", "Claim Patient"
+        PASSWORD_RESET = "password_reset", "Password Reset"
+
+    contact = models.CharField(max_length=120)  # Phone or email
+    purpose = models.CharField(max_length=32, choices=Purpose.choices)
+    code_hash = models.CharField(max_length=128)  # SHA-256 hash of OTP code
+    expires_at = models.DateTimeField()
+    attempts_count = models.PositiveSmallIntegerField(default=0)
+    is_used = models.BooleanField(default=False)
+    matched_patient = models.ForeignKey(
+        Patient,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verification_challenges",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["contact", "purpose", "is_used"], name="chal_contact_purp_idx"),
+        ]
+
 

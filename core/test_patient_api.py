@@ -111,12 +111,19 @@ class PatientApiTests(TransactionTestCase):
             department=self.dept,
         )
 
+        # NumberSequence for PATIENT MRN
+        from core.models import NumberSequence
+        from django.core.cache import cache
+        cache.clear()
+        NumberSequence.objects.get_or_create(code="PATIENT", defaults={"prefix": "P-", "next_value": 1})
+
     def _auth(self, user):
         from rest_framework_simplejwt.tokens import RefreshToken
         refresh = RefreshToken.for_user(user)
         token = str(refresh.access_token)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         return token
+
 
     def test_unauthenticated_requests_are_rejected(self):
         res = self.client.get("/api/v1/me/")
@@ -403,4 +410,176 @@ class PatientApiTests(TransactionTestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
+    def test_onboarding_request_otp_does_not_reveal_existence(self):
+        # Request OTP for new phone
+        res = self.client.post(
+            "/api/v1/auth/otp/request/",
+            {"contact": "+919999900001", "purpose": "registration"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn("message", res.data)
+
+        # Request OTP for existing phone
+        res2 = self.client.post(
+            "/api/v1/auth/otp/request/",
+            {"contact": self.patient1.phone, "purpose": "registration"},
+            format="json",
+        )
+        self.assertEqual(res2.status_code, status.HTTP_200_OK)
+        # Uniform response prevents user enumeration
+        self.assertEqual(res.data["message"], res2.data["message"])
+
+    def test_onboarding_registration_flow(self):
+        contact = "+919999911111"
+        from core.services.verification import VerificationProvider
+        _, code = VerificationProvider.create_challenge(
+            contact=contact,
+            purpose="registration",
+            fixed_code="654321",
+        )
+
+        # Attempt with wrong code -> 400
+        res = self.client.post(
+            "/api/v1/auth/register/",
+            {
+                "contact": contact,
+                "code": "000000",
+                "full_name": "Dev Sharma",
+                "password": "SecurePassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Attempt with valid code -> 201
+        res = self.client.post(
+            "/api/v1/auth/register/",
+            {
+                "contact": contact,
+                "code": "654321",
+                "full_name": "Dev Sharma",
+                "password": "SecurePassword123!",
+                "date_of_birth": "1995-05-15",
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertIn("access", res.data)
+        self.assertIn("mrn", res.data["patient"])
+        self.assertTrue(res.data["patient"]["mrn"].startswith("P-"))
+        self.assertTrue(res.data["patient"]["phone_verified"])
+
+        # Replay same code -> 400 (challenge marked as used)
+        res_replay = self.client.post(
+            "/api/v1/auth/register/",
+            {
+                "contact": contact,
+                "code": "654321",
+                "full_name": "Dev Sharma",
+                "password": "SecurePassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(res_replay.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_onboarding_claim_existing_patient_flow(self):
+        # Create an unlinked existing patient registered at reception
+        from core.services.numbering import next_number
+        unlinked_patient = Patient.objects.create(
+            mrn=next_number("PATIENT"),
+            full_name="Sunita Mishra",
+            phone="+919876549999",
+        )
+
+        from core.services.verification import VerificationProvider
+        _, code = VerificationProvider.create_challenge(
+            contact=unlinked_patient.phone,
+            purpose="claim_patient",
+            fixed_code="112233",
+        )
+
+        # Attempt to claim with wrong MRN -> 404
+        res = self.client.post(
+            "/api/v1/auth/claim-patient/",
+            {
+                "mrn": "MRN-NON-EXISTENT",
+                "contact": unlinked_patient.phone,
+                "code": "112233",
+                "password": "SecurePassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Create challenge for the successful claim
+        _, valid_code = VerificationProvider.create_challenge(
+            contact=unlinked_patient.phone,
+            purpose="claim_patient",
+            fixed_code="445566",
+        )
+
+        # Claim with valid MRN and verified contact -> 200
+        res = self.client.post(
+            "/api/v1/auth/claim-patient/",
+            {
+                "mrn": unlinked_patient.mrn,
+                "contact": unlinked_patient.phone,
+                "code": "445566",
+                "password": "SecurePassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn("access", res.data)
+
+        self.assertEqual(res.data["patient"]["mrn"], unlinked_patient.mrn)
+
+        # Second attempt to claim same patient -> 409 Conflict
+        _, code2 = VerificationProvider.create_challenge(
+            contact=unlinked_patient.phone,
+            purpose="claim_patient",
+            fixed_code="998877",
+        )
+        res_dup = self.client.post(
+            "/api/v1/auth/claim-patient/",
+            {
+                "mrn": unlinked_patient.mrn,
+                "contact": unlinked_patient.phone,
+                "code": "998877",
+                "password": "SecurePassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(res_dup.status_code, status.HTTP_409_CONFLICT)
+
+    def test_limited_patient_profile_update_and_audit(self):
+        self._auth(self.patient1_user)
+
+        # Attempt to modify restricted fields (mrn, allergy_safety_notes)
+        patch_payload = {
+            "mrn": "FORGED-MRN",
+            "allergy_safety_notes": "Fake notes",
+            "emergency_contact_name": "Father",
+            "emergency_contact_phone": "+919876543299",
+            "address": "New Flat 402, Gomti Nagar",
+        }
+        res = self.client.patch("/api/v1/me/", patch_payload, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        self.patient1.refresh_from_db()
+        # MRN and allergy notes remain untouched
+        self.assertEqual(self.patient1.mrn, "MRN-001")
+        self.assertNotEqual(self.patient1.allergy_safety_notes, "Fake notes")
+        # Allowed fields are updated
+        self.assertEqual(self.patient1.emergency_contact_name, "Father")
+        self.assertEqual(self.patient1.address, "New Flat 402, Gomti Nagar")
+
+        # AuditEvent is recorded
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                target_id=str(self.patient1.pk),
+                action="patient.demographics_updated",
+            ).exists()
+        )
 
