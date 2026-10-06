@@ -941,3 +941,21 @@ class InpatientDeposit(TimestampedModel):
 
     def __str__(self):
         return f"{self.receipt_number} · {self.amount} for {self.admission.admission_number}"
+
+
+class PatientAccount(TimestampedModel):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="patient_account",
+    )
+    patient = models.OneToOneField(
+        Patient,
+        on_delete=models.PROTECT,
+        related_name="account",
+    )
+    is_verified = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Account for {self.patient.full_name} ({self.user.username})"
+
