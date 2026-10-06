@@ -1,13 +1,23 @@
 from django.conf import settings
 from django.db import transaction, IntegrityError, OperationalError
+from django.db.models import Count, Prefetch
 from django.utils import timezone
-from django.http import Http404
+from django.http import FileResponse, Http404
+from django.utils.cache import patch_vary_headers
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
-from core.models import StaffProfile, VisitType, Appointment, AuditEvent
+from core.models import (
+    Appointment,
+    AuditEvent,
+    Consultation,
+    PatientDocument,
+    Prescription,
+    StaffProfile,
+    VisitType,
+)
 from core.forms import appointment_slot_conflicts
 from core.views import _audit_appointment_change
 from core.api.permissions import IsPatientUser
@@ -30,6 +40,15 @@ from core.api.serializers import (
     AppointmentListSerializer,
     AppointmentDetailSerializer,
     AppointmentBookingSerializer,
+    HealthRecordDetailSerializer,
+    HealthRecordListSerializer,
+    PatientDocumentSerializer,
+    PrescriptionDetailSerializer,
+    PrescriptionListSerializer,
+)
+from core.services.documents import (
+    open_validated_patient_document,
+    patient_document_download_name,
 )
 
 User = get_user_model()
@@ -475,3 +494,153 @@ class LogoutAllView(APIView):
             BlacklistedToken.objects.get_or_create(token=token)
         return Response({"message": "Successfully logged out from all devices."}, status=status.HTTP_200_OK)
 
+
+def _released_health_records(patient):
+    visible_prescriptions = Prescription.objects.filter(
+        patient=patient,
+        status=Prescription.Status.ISSUED,
+        issued_at__isnull=False,
+    ).only("id", "consultation_id")
+    return (
+        Consultation.objects.filter(
+            patient=patient,
+            patient_released_at__isnull=False,
+            patient_access_revoked_at__isnull=True,
+        )
+        .select_related("appointment", "doctor__user", "doctor__department")
+        .prefetch_related(
+            Prefetch(
+                "prescriptions",
+                queryset=visible_prescriptions,
+                to_attr="visible_prescriptions",
+            )
+        )
+        .order_by("-created_at", "-id")
+    )
+
+
+def _issued_prescriptions(patient):
+    return (
+        Prescription.objects.filter(
+            patient=patient,
+            status=Prescription.Status.ISSUED,
+            issued_at__isnull=False,
+        )
+        .select_related("doctor__user", "doctor__department")
+        .annotate(item_count=Count("items"))
+        .order_by("-issued_at", "-id")
+    )
+
+
+def _released_documents(patient):
+    return PatientDocument.objects.filter(
+        patient=patient,
+        validation_status=PatientDocument.ValidationStatus.CLEAN,
+        patient_released_at__isnull=False,
+        patient_access_revoked_at__isnull=True,
+        content_type__in=("application/pdf", "image/jpeg", "image/png", "image/webp"),
+        size_bytes__gt=0,
+        size_bytes__lte=settings.PATIENT_DOCUMENT_MAX_BYTES,
+    ).order_by("-created_at", "-id")
+
+
+def _clinical_response(data):
+    response = Response(data)
+    response["Cache-Control"] = "private, no-store"
+    response["Pragma"] = "no-cache"
+    patch_vary_headers(response, ("Authorization",))
+    return response
+
+
+class PatientClinicalAPIView(APIView):
+    permission_classes = [IsPatientUser]
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Cache-Control"] = "private, no-store"
+        response["Pragma"] = "no-cache"
+        patch_vary_headers(response, ("Authorization",))
+        return response
+
+
+class HealthRecordListView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request):
+        patient = request.user.patient_account.patient
+        return _clinical_response(
+            HealthRecordListSerializer(
+                _released_health_records(patient), many=True
+            ).data
+        )
+
+
+class HealthRecordDetailView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request, pk):
+        patient = request.user.patient_account.patient
+        try:
+            record = _released_health_records(patient).get(pk=pk)
+        except Consultation.DoesNotExist:
+            raise Http404("Health record not found")
+        return _clinical_response(HealthRecordDetailSerializer(record).data)
+
+
+class PrescriptionListView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request):
+        patient = request.user.patient_account.patient
+        return _clinical_response(
+            PrescriptionListSerializer(_issued_prescriptions(patient), many=True).data
+        )
+
+
+class PrescriptionDetailView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request, pk):
+        patient = request.user.patient_account.patient
+        try:
+            prescription = _issued_prescriptions(patient).prefetch_related(
+                "items__medicine"
+            ).get(pk=pk)
+        except Prescription.DoesNotExist:
+            raise Http404("Prescription not found")
+        return _clinical_response(PrescriptionDetailSerializer(prescription).data)
+
+
+class PatientDocumentListView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request):
+        patient = request.user.patient_account.patient
+        return _clinical_response(
+            PatientDocumentSerializer(_released_documents(patient), many=True).data
+        )
+
+
+class PatientDocumentDownloadView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request, public_id):
+        patient = request.user.patient_account.patient
+        try:
+            document = _released_documents(patient).get(public_id=public_id)
+            file_handle = open_validated_patient_document(document)
+        except (PatientDocument.DoesNotExist, FileNotFoundError):
+            raise Http404("Document not found")
+
+        response = FileResponse(
+            file_handle,
+            as_attachment=True,
+            filename=patient_document_download_name(document),
+            content_type=document.content_type,
+        )
+        response["Content-Length"] = str(document.size_bytes)
+        response["Cache-Control"] = "private, no-store"
+        response["Pragma"] = "no-cache"
+        response["X-Content-Type-Options"] = "nosniff"
+        patch_vary_headers(response, ("Authorization",))
+        return response

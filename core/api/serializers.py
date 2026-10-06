@@ -1,6 +1,19 @@
 from rest_framework import serializers
 from django.utils import timezone
-from core.models import Patient, StaffProfile, VisitType, Appointment, HospitalSettings
+from django.urls import reverse
+
+from core.models import (
+    Appointment,
+    Consultation,
+    HospitalSettings,
+    Medicine,
+    Patient,
+    PatientDocument,
+    Prescription,
+    PrescriptionItem,
+    StaffProfile,
+    VisitType,
+)
 from core.forms import appointment_slot_conflicts
 
 
@@ -201,3 +214,127 @@ class AppointmentBookingSerializer(serializers.Serializer):
     def validate(self, attrs):
         return attrs
 
+
+class PatientFacingDoctorSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.SerializerMethodField()
+    department = serializers.SerializerMethodField()
+
+    def get_name(self, obj):
+        return obj.user.get_full_name() or obj.user.get_username()
+
+    def get_department(self, obj):
+        return obj.department.name if obj.department else ""
+
+
+class HealthRecordListSerializer(serializers.ModelSerializer):
+    appointment_id = serializers.IntegerField(read_only=True, allow_null=True)
+    doctor = PatientFacingDoctorSerializer(read_only=True)
+    encounter_at = serializers.SerializerMethodField()
+    released_at = serializers.DateTimeField(source="patient_released_at", read_only=True)
+
+    class Meta:
+        model = Consultation
+        fields = [
+            "id",
+            "appointment_id",
+            "doctor",
+            "encounter_at",
+            "released_at",
+            "follow_up_date",
+        ]
+
+    def get_encounter_at(self, obj):
+        if obj.appointment_id and obj.appointment.completed_at:
+            return obj.appointment.completed_at
+        return obj.created_at
+
+
+class HealthRecordDetailSerializer(HealthRecordListSerializer):
+    prescription_ids = serializers.SerializerMethodField()
+
+    class Meta(HealthRecordListSerializer.Meta):
+        fields = HealthRecordListSerializer.Meta.fields + [
+            "follow_up_note",
+            "prescription_ids",
+        ]
+
+    def get_prescription_ids(self, obj):
+        return [prescription.id for prescription in obj.visible_prescriptions]
+
+
+class PrescriptionListSerializer(serializers.ModelSerializer):
+    consultation_id = serializers.IntegerField(read_only=True, allow_null=True)
+    doctor = PatientFacingDoctorSerializer(read_only=True)
+    item_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Prescription
+        fields = [
+            "id",
+            "number",
+            "consultation_id",
+            "doctor",
+            "issued_at",
+            "item_count",
+        ]
+
+
+class PatientMedicineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Medicine
+        fields = [
+            "id",
+            "generic_name",
+            "brand_name",
+            "strength",
+            "dosage_form",
+            "unit",
+        ]
+
+
+class PatientPrescriptionItemSerializer(serializers.ModelSerializer):
+    medicine = PatientMedicineSerializer(read_only=True)
+
+    class Meta:
+        model = PrescriptionItem
+        fields = [
+            "id",
+            "medicine",
+            "dosage",
+            "frequency",
+            "duration",
+            "instructions",
+            "quantity",
+        ]
+
+
+class PrescriptionDetailSerializer(PrescriptionListSerializer):
+    items = PatientPrescriptionItemSerializer(many=True, read_only=True)
+
+    class Meta(PrescriptionListSerializer.Meta):
+        fields = PrescriptionListSerializer.Meta.fields + ["items"]
+
+
+class PatientDocumentSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(source="public_id", read_only=True)
+    document_type_label = serializers.CharField(
+        source="get_document_type_display", read_only=True
+    )
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PatientDocument
+        fields = [
+            "id",
+            "document_type",
+            "document_type_label",
+            "title",
+            "created_at",
+            "content_type",
+            "size_bytes",
+            "download_url",
+        ]
+
+    def get_download_url(self, obj):
+        return reverse("patient_document_download", kwargs={"public_id": obj.public_id})

@@ -17,6 +17,7 @@ from .models import (
     StaffProfile,
     VisitType,
 )
+from .services.documents import inspect_patient_document_upload
 
 APPOINTMENT_DURATION = timedelta(minutes=30)
 
@@ -218,6 +219,24 @@ class PatientDocumentForm(forms.ModelForm):
             ),
         }
 
+    def clean_file(self):
+        upload = self.cleaned_data["file"]
+        self._document_metadata = inspect_patient_document_upload(upload)
+        return upload
+
+    def save(self, commit=True):
+        document = super().save(commit=False)
+        metadata = getattr(self, "_document_metadata", None)
+        if metadata:
+            document.content_type = metadata["content_type"]
+            document.size_bytes = metadata["size_bytes"]
+            document.sha256 = metadata["sha256"]
+            document.validation_status = metadata["validation_status"]
+        if commit:
+            document.save()
+            self.save_m2m()
+        return document
+
 
 class AdmissionForm(forms.ModelForm):
     class Meta:
@@ -347,5 +366,4 @@ class DischargeForm(forms.ModelForm):
                 attrs={"class": "clinical-input"},
             ),
         }
-
 

@@ -18,4 +18,8 @@ class IsPatientUser(permissions.BasePermission):
         if StaffProfile.objects.filter(user=request.user).exists() or request.user.is_staff or request.user.is_superuser:
             return False
 
-        return hasattr(request.user, "patient_account") and request.user.patient_account is not None
+        if not request.user.is_active or not hasattr(request.user, "patient_account"):
+            return False
+
+        account = request.user.patient_account
+        return account.is_verified and account.patient.archived_at is None

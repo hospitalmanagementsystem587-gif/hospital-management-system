@@ -119,6 +119,18 @@ STORAGES = {
 }
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+PRIVATE_PATIENT_DOCUMENT_ROOT = Path(
+    os.getenv(
+        "PRIVATE_PATIENT_DOCUMENT_ROOT",
+        BASE_DIR / "private-media" / "patient-documents",
+    )
+)
+PATIENT_DOCUMENT_MAX_BYTES = int(
+    os.getenv("PATIENT_DOCUMENT_MAX_BYTES", str(10 * 1024 * 1024))
+)
+PATIENT_DOCUMENT_MALWARE_SCAN_CALLBACK = os.getenv(
+    "PATIENT_DOCUMENT_MALWARE_SCAN_CALLBACK", ""
+).strip()
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 SESSION_COOKIE_SECURE = not DEBUG
@@ -188,4 +200,3 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
-

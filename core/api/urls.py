@@ -36,4 +36,12 @@ urlpatterns = [
     path("appointments/", views.AppointmentListCreateView.as_view(), name="appointment_list_create"),
     path("appointments/<int:pk>/", views.AppointmentDetailView.as_view(), name="appointment_detail"),
     path("appointments/<int:pk>/cancel/", views.AppointmentCancelView.as_view(), name="appointment_cancel"),
+
+    # Patient-owned clinical records (read-only)
+    path("me/health-records/", views.HealthRecordListView.as_view(), name="health_record_list"),
+    path("me/health-records/<int:pk>/", views.HealthRecordDetailView.as_view(), name="health_record_detail"),
+    path("me/prescriptions/", views.PrescriptionListView.as_view(), name="patient_prescription_list"),
+    path("me/prescriptions/<int:pk>/", views.PrescriptionDetailView.as_view(), name="patient_prescription_detail"),
+    path("me/documents/", views.PatientDocumentListView.as_view(), name="patient_document_list"),
+    path("me/documents/<uuid:public_id>/download/", views.PatientDocumentDownloadView.as_view(), name="patient_document_download"),
 ]
