@@ -21,6 +21,7 @@ from core.models import (
     Prescription,
     StaffProfile,
     VisitType,
+    PatientFeedback,
 )
 from core.forms import appointment_slot_conflicts
 from core.views import _audit_appointment_change
@@ -53,6 +54,10 @@ from core.api.serializers import (
     PatientDocumentSerializer,
     PrescriptionDetailSerializer,
     PrescriptionListSerializer,
+    FeedbackSubmitSerializer,
+    PatientFeedbackDetailSerializer,
+    PublicFeedbackReviewSerializer,
+    StaffFeedbackModerationSerializer,
 )
 from core.services.documents import (
     open_validated_patient_document,
@@ -746,3 +751,322 @@ class PatientDocumentDownloadView(PatientClinicalAPIView):
         response["X-Content-Type-Options"] = "nosniff"
         patch_vary_headers(response, ("Authorization",))
         return response
+
+
+class PatientFeedbackEligibilityView(APIView):
+    """
+    Returns completed appointments eligible for feedback,
+    and appointments for which feedback has already been submitted.
+    """
+    permission_classes = [IsPatientUser]
+
+    def get(self, request):
+        patient = request.user.patient_account.patient
+        # Completed appointments
+        completed_appts = Appointment.objects.filter(
+            patient=patient,
+            status=Appointment.Status.COMPLETED,
+        ).select_related("doctor__user", "visit_type").order_by("-scheduled_at")
+
+        existing_feedbacks = {
+            f.appointment_id: f for f in PatientFeedback.objects.filter(patient=patient)
+        }
+
+        eligible = []
+        for appt in completed_appts:
+            fb = existing_feedbacks.get(appt.id)
+            eligible.append({
+                "appointment_id": appt.id,
+                "doctor_name": appt.doctor.user.get_full_name() or appt.doctor.user.username,
+                "doctor_id": appt.doctor.id,
+                "visit_type": appt.visit_type.name,
+                "scheduled_at": appt.scheduled_at.isoformat(),
+                "has_submitted": fb is not None,
+                "feedback_id": fb.id if fb else None,
+                "feedback_status": fb.status if fb else None,
+            })
+
+        return Response({"eligible_appointments": eligible}, status=status.HTTP_200_OK)
+
+
+class PatientFeedbackListCreateView(APIView):
+    """
+    GET: List all feedbacks submitted by current authenticated patient.
+    POST: Submit verified feedback for an eligible completed appointment.
+    """
+    permission_classes = [IsPatientUser]
+
+    def get(self, request):
+        patient = request.user.patient_account.patient
+        feedbacks = PatientFeedback.objects.filter(patient=patient).select_related(
+            "doctor__user", "doctor__department", "appointment"
+        ).order_by("-created_at")
+        serializer = PatientFeedbackDetailSerializer(feedbacks, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        patient = request.user.patient_account.patient
+        serializer = FeedbackSubmitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": {"status_code": 400, "message": "Validation error.", "details": serializer.errors}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        appointment_id = serializer.validated_data["appointment_id"]
+        try:
+            appointment = Appointment.objects.select_related("doctor").get(pk=appointment_id)
+        except Appointment.DoesNotExist:
+            return Response(
+                {"error": {"status_code": 404, "message": "Appointment not found.", "details": {}}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Cross-patient verification
+        if appointment.patient_id != patient.id:
+            return Response(
+                {"error": {"status_code": 403, "message": "You can only submit feedback for your own care.", "details": {}}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Must be completed
+        if appointment.status != Appointment.Status.COMPLETED:
+            return Response(
+                {"error": {"status_code": 400, "message": "Feedback can only be submitted for completed care.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # One feedback per appointment
+        if PatientFeedback.objects.filter(appointment=appointment).exists():
+            return Response(
+                {"error": {"status_code": 409, "message": "Feedback has already been submitted for this appointment.", "details": {}}},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        feedback = PatientFeedback.objects.create(
+            patient=patient,
+            appointment=appointment,
+            doctor=appointment.doctor,
+            rating=serializer.validated_data["rating"],
+            category=serializer.validated_data.get("category", PatientFeedback.Category.DOCTOR_CONSULTATION),
+            comment=serializer.validated_data.get("comment", ""),
+            is_anonymous_public=serializer.validated_data.get("is_anonymous_public", True),
+            status=PatientFeedback.Status.PENDING,
+        )
+
+        _audit_patient_change(
+            request,
+            patient,
+            "patient.feedback_submitted",
+            {"feedback_id": feedback.id, "appointment_id": appointment.id, "rating": feedback.rating},
+        )
+
+        detail_serializer = PatientFeedbackDetailSerializer(feedback)
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class PatientFeedbackDetailView(APIView):
+    """
+    GET: Retrieve specific patient feedback.
+    PATCH: Edit rating/comment within 48-hour window.
+    """
+    permission_classes = [IsPatientUser]
+
+    def get(self, request, pk):
+        patient = request.user.patient_account.patient
+        try:
+            feedback = PatientFeedback.objects.select_related(
+                "doctor__user", "doctor__department", "appointment"
+            ).get(pk=pk, patient=patient)
+        except PatientFeedback.DoesNotExist:
+            raise Http404("Feedback not found")
+        return Response(PatientFeedbackDetailSerializer(feedback).data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        patient = request.user.patient_account.patient
+        try:
+            feedback = PatientFeedback.objects.get(pk=pk, patient=patient)
+        except PatientFeedback.DoesNotExist:
+            raise Http404("Feedback not found")
+
+        # Edit window: 48 hours
+        if timezone.now() - feedback.created_at > timezone.timedelta(hours=48):
+            return Response(
+                {"error": {"status_code": 400, "message": "The edit window for this feedback has expired.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if feedback.status == PatientFeedback.Status.WITHDRAWN:
+            return Response(
+                {"error": {"status_code": 400, "message": "Withdrawn feedback cannot be modified.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rating = request.data.get("rating")
+        if rating is not None:
+            try:
+                rating = int(rating)
+            except (ValueError, TypeError):
+                rating = None
+            if rating is None or rating < 1 or rating > 5:
+                return Response(
+                    {"error": {"status_code": 400, "message": "Rating must be an integer between 1 and 5.", "details": {}}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            feedback.rating = rating
+
+        comment = request.data.get("comment")
+        if comment is not None:
+            if "<script" in comment.lower() or "</script>" in comment.lower():
+                return Response(
+                    {"error": {"status_code": 400, "message": "Invalid characters in comment.", "details": {}}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            feedback.comment = comment
+
+        is_anon = request.data.get("is_anonymous_public")
+        if is_anon is not None:
+            feedback.is_anonymous_public = bool(is_anon)
+
+        # Editing resets status back to pending moderation
+        feedback.status = PatientFeedback.Status.PENDING
+        feedback.save()
+
+        _audit_patient_change(
+            request,
+            patient,
+            "patient.feedback_updated",
+            {"feedback_id": feedback.id},
+        )
+        return Response(PatientFeedbackDetailSerializer(feedback).data, status=status.HTTP_200_OK)
+
+
+class PatientFeedbackWithdrawView(APIView):
+    """
+    POST: Withdraw feedback within 48-hour window.
+    """
+    permission_classes = [IsPatientUser]
+
+    def post(self, request, pk):
+        patient = request.user.patient_account.patient
+        try:
+            feedback = PatientFeedback.objects.get(pk=pk, patient=patient)
+        except PatientFeedback.DoesNotExist:
+            raise Http404("Feedback not found")
+
+        if feedback.status == PatientFeedback.Status.WITHDRAWN:
+            return Response(
+                {"message": "Feedback is already withdrawn."},
+                status=status.HTTP_200_OK,
+            )
+
+        if timezone.now() - feedback.created_at > timezone.timedelta(hours=48):
+            return Response(
+                {"error": {"status_code": 400, "message": "The withdrawal window for this feedback has expired.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        feedback.status = PatientFeedback.Status.WITHDRAWN
+        feedback.withdrawn_at = timezone.now()
+        feedback.save(update_fields=["status", "withdrawn_at", "updated_at"])
+
+        _audit_patient_change(
+            request,
+            patient,
+            "patient.feedback_withdrawn",
+            {"feedback_id": feedback.id},
+        )
+        return Response(PatientFeedbackDetailSerializer(feedback).data, status=status.HTTP_200_OK)
+
+
+class PublicFeedbackListView(APIView):
+    """
+    Public feed of verified, published patient feedback reviews.
+    Excludes pending, rejected, and withdrawn feedback.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        qs = PatientFeedback.objects.filter(
+            status=PatientFeedback.Status.PUBLISHED
+        ).select_related("doctor__user", "patient").order_by("-created_at")
+
+        category = request.query_params.get("category")
+        if category:
+            qs = qs.filter(category=category)
+
+        doctor_id = request.query_params.get("doctor_id")
+        if doctor_id:
+            qs = qs.filter(doctor_id=doctor_id)
+
+        serializer = PublicFeedbackReviewSerializer(qs[:50], many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class StaffFeedbackModerationListView(APIView):
+    """
+    Staff moderation queue for submitted feedback.
+    Requires staff user with can_moderate_feedback permission.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not (request.user.is_staff and request.user.has_perm("core.can_moderate_feedback")):
+            return Response(
+                {"error": {"status_code": 403, "message": "Permission denied.", "details": {}}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        status_filter = request.query_params.get("status", PatientFeedback.Status.PENDING)
+        qs = PatientFeedback.objects.filter(status=status_filter).select_related(
+            "patient", "doctor__user"
+        ).order_by("-created_at")
+        serializer = StaffFeedbackModerationSerializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class StaffFeedbackModerationActionView(APIView):
+    """
+    Staff action to approve (publish) or reject feedback with reason.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not (request.user.is_staff and request.user.has_perm("core.can_moderate_feedback")):
+            return Response(
+                {"error": {"status_code": 403, "message": "Permission denied.", "details": {}}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            feedback = PatientFeedback.objects.select_related("patient", "doctor__user").get(pk=pk)
+        except PatientFeedback.DoesNotExist:
+            raise Http404("Feedback not found")
+
+        action = request.data.get("action")  # "publish", "reject"
+        reason = request.data.get("reason", "").strip()
+
+        if action not in ["publish", "reject"]:
+            return Response(
+                {"error": {"status_code": 400, "message": "Action must be 'publish' or 'reject'.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if action == "reject" and not reason:
+            return Response(
+                {"error": {"status_code": 400, "message": "A reason is required when rejecting feedback.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        feedback.status = PatientFeedback.Status.PUBLISHED if action == "publish" else PatientFeedback.Status.REJECTED
+        feedback.moderated_by = request.user
+        feedback.moderated_at = timezone.now()
+        feedback.moderation_notes = reason
+        feedback.save(update_fields=["status", "moderated_by", "moderated_at", "moderation_notes", "updated_at"])
+
+        _audit_patient_change(
+            request,
+            feedback.patient,
+            f"feedback.{action}ed",
+            {"feedback_id": feedback.id, "reason": reason},
+        )
+        return Response(StaffFeedbackModerationSerializer(feedback).data, status=status.HTTP_200_OK)

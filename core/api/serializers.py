@@ -16,6 +16,7 @@ from core.models import (
     PrescriptionItem,
     StaffProfile,
     VisitType,
+    PatientFeedback,
 )
 from core.forms import appointment_slot_conflicts
 
@@ -87,6 +88,9 @@ class DoctorSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     department_name = serializers.CharField(source="department.name", read_only=True)
     department_code = serializers.CharField(source="department.code", read_only=True)
+    consultation_fee = serializers.IntegerField(read_only=True)
+    rating = serializers.SerializerMethodField()
+    review_count = serializers.SerializerMethodField()
 
     class Meta:
         model = StaffProfile
@@ -104,10 +108,25 @@ class DoctorSerializer(serializers.ModelSerializer):
             "opd_schedule",
             "consultation_fee",
             "biography",
+            "rating",
+            "review_count",
         ]
 
     def get_full_name(self, obj):
         return obj.user.get_full_name() or obj.user.username
+
+    def get_rating(self, obj):
+        from django.db.models import Avg
+        MIN_REVIEWS_THRESHOLD = 3
+        published = obj.doctor_feedbacks.filter(status=PatientFeedback.Status.PUBLISHED)
+        count = published.count()
+        if count < MIN_REVIEWS_THRESHOLD:
+            return 0.0
+        avg_val = published.aggregate(avg=Avg("rating"))["avg"]
+        return round(float(avg_val), 1) if avg_val is not None else 0.0
+
+    def get_review_count(self, obj):
+        return obj.doctor_feedbacks.filter(status=PatientFeedback.Status.PUBLISHED).count()
 
 
 class DepartmentDetailSerializer(serializers.ModelSerializer):
@@ -420,3 +439,155 @@ class PatientDocumentSerializer(serializers.ModelSerializer):
 
     def get_download_url(self, obj):
         return reverse("patient_document_download", kwargs={"public_id": obj.public_id})
+
+
+class FeedbackSubmitSerializer(serializers.ModelSerializer):
+    appointment_id = serializers.IntegerField(write_only=True)
+
+    class Meta:
+        model = PatientFeedback
+        fields = [
+            "id",
+            "appointment_id",
+            "rating",
+            "category",
+            "comment",
+            "is_anonymous_public",
+            "created_at",
+            "status",
+        ]
+        read_only_fields = ["id", "created_at", "status"]
+
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError("Rating must be between 1 and 5.")
+        return value
+
+    def validate_comment(self, value):
+        # Basic abuse / HTML tag strip check
+        if "<script" in value.lower() or "</script>" in value.lower():
+            raise serializers.ValidationError("Invalid characters or script tags in comment.")
+        return value
+
+
+class PatientFeedbackDetailSerializer(serializers.ModelSerializer):
+    appointment_id = serializers.IntegerField(source="appointment.id", read_only=True)
+    doctor_name = serializers.SerializerMethodField()
+    department_name = serializers.SerializerMethodField()
+    is_editable = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PatientFeedback
+        fields = [
+            "id",
+            "appointment_id",
+            "doctor_name",
+            "department_name",
+            "rating",
+            "category",
+            "comment",
+            "is_anonymous_public",
+            "status",
+            "is_editable",
+            "created_at",
+            "updated_at",
+            "withdrawn_at",
+        ]
+
+    def get_doctor_name(self, obj):
+        if obj.doctor and obj.doctor.user:
+            return obj.doctor.user.get_full_name() or obj.doctor.user.username
+        return ""
+
+    def get_department_name(self, obj):
+        if obj.doctor and obj.doctor.department:
+            return obj.doctor.department.name
+        return ""
+
+    def get_is_editable(self, obj):
+        if obj.status in [PatientFeedback.Status.WITHDRAWN, PatientFeedback.Status.REJECTED]:
+            return False
+        # 48-hour edit/withdrawal window
+        return timezone.now() - obj.created_at <= timezone.timedelta(hours=48)
+
+
+class PublicFeedbackReviewSerializer(serializers.ModelSerializer):
+    patient_display_name = serializers.SerializerMethodField()
+    doctor_name = serializers.SerializerMethodField()
+    date_str = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PatientFeedback
+        fields = [
+            "id",
+            "patient_display_name",
+            "doctor_name",
+            "rating",
+            "category",
+            "comment",
+            "date_str",
+            "created_at",
+        ]
+
+    def get_patient_display_name(self, obj):
+        if obj.is_anonymous_public:
+            return "Verified Patient"
+        # Hide full MRN or sensitive identifiers; e.g. "S*** G***" or "Verified Patient"
+        name_parts = obj.patient.full_name.split()
+        if len(name_parts) >= 2:
+            return f"{name_parts[0][0]}*** {name_parts[-1][0]}***"
+        elif name_parts:
+            return f"{name_parts[0][0]}***"
+        return "Verified Patient"
+
+    def get_doctor_name(self, obj):
+        if obj.doctor and obj.doctor.user:
+            return obj.doctor.user.get_full_name() or obj.doctor.user.username
+        return ""
+
+    def get_date_str(self, obj):
+        return obj.created_at.strftime("%d %b %Y")
+
+
+class StaffFeedbackModerationSerializer(serializers.ModelSerializer):
+    patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    doctor_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PatientFeedback
+        fields = [
+            "id",
+            "patient_mrn",
+            "patient_name",
+            "doctor_name",
+            "appointment_id",
+            "rating",
+            "category",
+            "comment",
+            "is_anonymous_public",
+            "status",
+            "moderation_notes",
+            "moderated_by",
+            "moderated_at",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "patient_mrn",
+            "patient_name",
+            "doctor_name",
+            "appointment_id",
+            "rating",
+            "category",
+            "comment",
+            "is_anonymous_public",
+            "moderated_by",
+            "moderated_at",
+            "created_at",
+        ]
+
+    def get_doctor_name(self, obj):
+        if obj.doctor and obj.doctor.user:
+            return obj.doctor.user.get_full_name() or obj.doctor.user.username
+        return ""

@@ -49,4 +49,13 @@ urlpatterns = [
     path("me/prescriptions/<int:pk>/", views.PrescriptionDetailView.as_view(), name="patient_prescription_detail"),
     path("me/documents/", views.PatientDocumentListView.as_view(), name="patient_document_list"),
     path("me/documents/<uuid:public_id>/download/", views.PatientDocumentDownloadView.as_view(), name="patient_document_download"),
+
+    # Feedback and moderation endpoints (Task 009)
+    path("feedback/public/", views.PublicFeedbackListView.as_view(), name="public_feedback_list"),
+    path("me/feedback/eligibility/", views.PatientFeedbackEligibilityView.as_view(), name="patient_feedback_eligibility"),
+    path("me/feedback/", views.PatientFeedbackListCreateView.as_view(), name="patient_feedback_list_create"),
+    path("me/feedback/<int:pk>/", views.PatientFeedbackDetailView.as_view(), name="patient_feedback_detail"),
+    path("me/feedback/<int:pk>/withdraw/", views.PatientFeedbackWithdrawView.as_view(), name="patient_feedback_withdraw"),
+    path("staff/feedback/", views.StaffFeedbackModerationListView.as_view(), name="staff_feedback_list"),
+    path("staff/feedback/<int:pk>/action/", views.StaffFeedbackModerationActionView.as_view(), name="staff_feedback_action"),
 ]
