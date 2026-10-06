@@ -680,3 +680,137 @@ class PatientApiTests(TransactionTestCase):
         self.assertEqual(len(res_search.data), 1)
         self.assertEqual(res_search.data[0]["question"], "What are the visiting hours?")
 
+    def test_patient_medication_schedules_and_adherence(self):
+        import uuid
+        from datetime import date, timedelta
+        from core.models import MedicationSchedule, MedicationDoseLog, Medicine, Prescription, PrescriptionItem
+
+        self._auth(self.patient1_user)
+
+        med1 = Medicine.objects.create(
+            generic_name="Paracetamol",
+            brand_name="Crocin 500",
+            strength="500mg",
+            dosage_form="Tablet",
+            unit="strip",
+        )
+
+        rx1 = Prescription.objects.create(
+            number="RX-2026-0001",
+            patient=self.patient1,
+            doctor=self.doctor_profile,
+            status=Prescription.Status.ISSUED,
+            issued_at=timezone.now(),
+        )
+
+        rx1_item = PrescriptionItem.objects.create(
+            prescription=rx1,
+            medicine=med1,
+            dosage="1 tablet",
+            frequency="twice daily",
+            duration="10 days",
+            instructions="After meals",
+            quantity=20,
+        )
+
+        # Create medication schedule for patient 1
+        sched1 = MedicationSchedule.objects.create(
+            prescription_item=rx1_item,
+            patient=self.patient1,
+            dose_amount="1 tablet",
+            dose_unit="tablet",
+            target_times=["08:00", "20:00"],
+            meal_relation=MedicationSchedule.MealRelation.AFTER_MEAL,
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=10),
+            timezone="Asia/Kolkata",
+            is_active=True,
+            confirmed_by=self.doctor_profile,
+        )
+
+        # Inactive schedule should not be returned in list
+        sched_inactive = MedicationSchedule.objects.create(
+            prescription_item=rx1_item,
+            patient=self.patient1,
+            dose_amount="1 tablet",
+            dose_unit="tablet",
+            target_times=["14:00"],
+            meal_relation=MedicationSchedule.MealRelation.BEFORE_MEAL,
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=5),
+            timezone="Asia/Kolkata",
+            is_active=False,
+            confirmed_by=self.doctor_profile,
+        )
+
+
+        # 1. List active schedules for patient 1
+        res = self.client.get("/api/v1/me/medication-schedules/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [s["id"] for s in res.data]
+        self.assertIn(sched1.id, ids)
+        self.assertNotIn(sched_inactive.id, ids)
+        self.assertEqual(res.data[0]["dose_amount"], "1 tablet")
+        self.assertEqual(res.data[0]["target_times"], ["08:00", "20:00"])
+        self.assertEqual(res.data[0]["meal_relation"], "after_meal")
+        expected_doctor_name = self.doctor_user.get_full_name() or self.doctor_user.username
+        self.assertEqual(res.data[0]["confirmed_by_name"], expected_doctor_name)
+
+
+        # 2. Detail schedule
+        res_detail = self.client.get(f"/api/v1/me/medication-schedules/{sched1.id}/")
+        self.assertEqual(res_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_detail.data["id"], sched1.id)
+
+        # 3. Cross-patient isolation: Patient 2 cannot access Patient 1's schedule
+        self._auth(self.patient2_user)
+        res_p2 = self.client.get(f"/api/v1/me/medication-schedules/{sched1.id}/")
+        self.assertEqual(res_p2.status_code, status.HTTP_404_NOT_FOUND)
+
+        # 4. Log dose event (Patient 1)
+        self._auth(self.patient1_user)
+        key1 = uuid.uuid4()
+        scheduled_slot = "2026-10-07T08:00:00Z"
+        logged_at = "2026-10-07T08:05:00Z"
+
+        res_log = self.client.post(
+            "/api/v1/me/medication-schedules/log-dose/",
+            {
+                "schedule": sched1.id,
+                "scheduled_time": scheduled_slot,
+                "action": "taken",
+                "logged_at": logged_at,
+                "idempotency_key": str(key1),
+            },
+            format="json",
+        )
+        self.assertEqual(res_log.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res_log.data["action"], "taken")
+
+        # 5. Idempotent re-send with same idempotency key returns HTTP 200 OK
+        res_log_dup = self.client.post(
+            "/api/v1/me/medication-schedules/log-dose/",
+            {
+                "schedule": sched1.id,
+                "scheduled_time": scheduled_slot,
+                "action": "taken",
+                "logged_at": logged_at,
+                "idempotency_key": str(key1),
+            },
+            format="json",
+        )
+        self.assertEqual(res_log_dup.status_code, status.HTTP_200_OK)
+
+        # 6. Prescription cancellation hides schedule
+        rx1.status = Prescription.Status.CANCELLED
+        rx1.save()
+
+
+        res_after_cancel = self.client.get("/api/v1/me/medication-schedules/")
+        self.assertEqual(res_after_cancel.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_after_cancel.data), 0)
+
+        res_detail_cancel = self.client.get(f"/api/v1/me/medication-schedules/{sched1.id}/")
+        self.assertEqual(res_detail_cancel.status_code, status.HTTP_404_NOT_FOUND)
+
+

@@ -19,6 +19,8 @@ from core.models import (
     HospitalSettings,
     PatientDocument,
     Prescription,
+    MedicationSchedule,
+    MedicationDoseLog,
     StaffProfile,
     VisitType,
 )
@@ -53,7 +55,10 @@ from core.api.serializers import (
     PatientDocumentSerializer,
     PrescriptionDetailSerializer,
     PrescriptionListSerializer,
+    PatientMedicationScheduleSerializer,
+    MedicationDoseLogSerializer,
 )
+
 from core.services.documents import (
     open_validated_patient_document,
     patient_document_download_name,
@@ -746,3 +751,90 @@ class PatientDocumentDownloadView(PatientClinicalAPIView):
         response["X-Content-Type-Options"] = "nosniff"
         patch_vary_headers(response, ("Authorization",))
         return response
+
+
+class PatientMedicationScheduleListView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request):
+        patient = request.user.patient_account.patient
+        # Active confirmed schedules for the patient whose prescriptions are issued and not cancelled
+        schedules = (
+            MedicationSchedule.objects.filter(
+                patient=patient,
+                is_active=True,
+                prescription_item__prescription__status=Prescription.Status.ISSUED,
+            )
+            .select_related(
+                "prescription_item__medicine",
+                "prescription_item__prescription__doctor",
+                "confirmed_by",
+            )
+            .order_by("-start_date", "-id")
+        )
+        serializer = PatientMedicationScheduleSerializer(schedules, many=True)
+        return _clinical_response(serializer.data)
+
+
+class PatientMedicationScheduleDetailView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request, pk):
+        patient = request.user.patient_account.patient
+        try:
+            schedule = (
+                MedicationSchedule.objects.filter(
+                    patient=patient,
+                    prescription_item__prescription__status=Prescription.Status.ISSUED,
+                )
+                .select_related(
+                    "prescription_item__medicine",
+                    "prescription_item__prescription__doctor",
+                    "confirmed_by",
+                )
+                .get(pk=pk)
+            )
+        except MedicationSchedule.DoesNotExist:
+            raise Http404("Medication schedule not found")
+        serializer = PatientMedicationScheduleSerializer(schedule)
+        return _clinical_response(serializer.data)
+
+
+class PatientMedicationDoseLogCreateView(APIView):
+    permission_classes = [IsPatientUser]
+
+    def post(self, request):
+        patient = request.user.patient_account.patient
+
+        # Fast idempotent lookup by idempotency_key before unique validation
+        raw_key = request.data.get("idempotency_key")
+        if raw_key:
+            existing = MedicationDoseLog.objects.filter(
+                idempotency_key=raw_key, schedule__patient=patient
+            ).first()
+            if existing:
+                return Response(MedicationDoseLogSerializer(existing).data, status=status.HTTP_200_OK)
+
+        serializer = MedicationDoseLogSerializer(data=request.data)
+        if not serializer.is_valid():
+            # If failed because of unique constraint on schedule + scheduled_time, check if existing record matches
+            schedule_id = request.data.get("schedule")
+            scheduled_time = request.data.get("scheduled_time")
+            if schedule_id and scheduled_time:
+                existing_slot = MedicationDoseLog.objects.filter(
+                    schedule_id=schedule_id,
+                    schedule__patient=patient,
+                    scheduled_time=scheduled_time,
+                ).first()
+                if existing_slot:
+                    return Response(MedicationDoseLogSerializer(existing_slot).data, status=status.HTTP_200_OK)
+            serializer.is_valid(raise_exception=True)
+
+        schedule = serializer.validated_data["schedule"]
+        if schedule.patient != patient:
+            raise Http404("Medication schedule not found")
+
+        dose_log = serializer.save()
+        return Response(MedicationDoseLogSerializer(dose_log).data, status=status.HTTP_201_CREATED)
+
+

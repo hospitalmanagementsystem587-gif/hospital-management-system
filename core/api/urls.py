@@ -49,4 +49,10 @@ urlpatterns = [
     path("me/prescriptions/<int:pk>/", views.PrescriptionDetailView.as_view(), name="patient_prescription_detail"),
     path("me/documents/", views.PatientDocumentListView.as_view(), name="patient_document_list"),
     path("me/documents/<uuid:public_id>/download/", views.PatientDocumentDownloadView.as_view(), name="patient_document_download"),
+
+    # Medication schedules & adherence
+    path("me/medication-schedules/", views.PatientMedicationScheduleListView.as_view(), name="patient_medication_schedule_list"),
+    path("me/medication-schedules/<int:pk>/", views.PatientMedicationScheduleDetailView.as_view(), name="patient_medication_schedule_detail"),
+    path("me/medication-schedules/log-dose/", views.PatientMedicationDoseLogCreateView.as_view(), name="patient_medication_dose_log"),
 ]
+

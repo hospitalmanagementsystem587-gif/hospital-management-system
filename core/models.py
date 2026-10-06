@@ -358,6 +358,90 @@ class PrescriptionItem(TimestampedModel):
         ]
 
 
+class MedicationSchedule(TimestampedModel):
+    class MealRelation(models.TextChoices):
+        BEFORE_MEAL = "before_meal", "Before Meal"
+        AFTER_MEAL = "after_meal", "After Meal"
+        WITH_MEAL = "with_meal", "With Meal"
+        NO_RELATION = "no_relation", "No Relation"
+
+    prescription_item = models.ForeignKey(
+        PrescriptionItem,
+        on_delete=models.PROTECT,
+        related_name="schedules",
+    )
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.PROTECT,
+        related_name="medication_schedules",
+    )
+    dose_amount = models.CharField(max_length=60)
+    dose_unit = models.CharField(max_length=40, default="tablet")
+    target_times = models.JSONField(
+        default=list,
+        help_text="List of HH:MM strings in local 24h format, e.g. ['08:00', '20:00']"
+    )
+    meal_relation = models.CharField(
+        max_length=20,
+        choices=MealRelation.choices,
+        default=MealRelation.NO_RELATION,
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    timezone = models.CharField(max_length=64, default="Asia/Kolkata")
+    is_active = models.BooleanField(default=True)
+    confirmed_by = models.ForeignKey(
+        StaffProfile,
+        on_delete=models.PROTECT,
+        related_name="confirmed_medication_schedules",
+    )
+    confirmed_at = models.DateTimeField(auto_now_add=True)
+    version = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["-start_date", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(end_date__gte=models.F("start_date")),
+                name="medication_schedule_dates_valid",
+            )
+        ]
+
+    def __str__(self):
+        return f"Schedule for {self.prescription_item.medicine.brand_name or self.prescription_item.medicine.generic_name} ({self.patient.mrn})"
+
+
+class MedicationDoseLog(TimestampedModel):
+    class Action(models.TextChoices):
+        TAKEN = "taken", "Taken"
+        SKIPPED = "skipped", "Skipped"
+
+    schedule = models.ForeignKey(
+        MedicationSchedule,
+        on_delete=models.CASCADE,
+        related_name="dose_logs",
+    )
+    scheduled_time = models.DateTimeField(
+        help_text="Expected scheduled dose timestamp in UTC"
+    )
+    action = models.CharField(max_length=16, choices=Action.choices, default=Action.TAKEN)
+    logged_at = models.DateTimeField()
+    idempotency_key = models.UUIDField(unique=True)
+
+    class Meta:
+        ordering = ["-scheduled_time"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["schedule", "scheduled_time"],
+                name="unique_schedule_scheduled_time_dose",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.action} at {self.scheduled_time} for {self.schedule_id}"
+
+
+
 class StockReceipt(TimestampedModel):
     number = models.CharField(max_length=40, unique=True)
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT)
