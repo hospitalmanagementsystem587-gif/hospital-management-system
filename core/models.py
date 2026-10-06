@@ -181,6 +181,41 @@ class HealthPackage(TimestampedModel):
         return self.name
 
 
+class HealthContent(TimestampedModel):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PUBLISHED = "published", "Published"
+        SUPERSEDED = "superseded", "Superseded"
+
+    slug = models.SlugField(max_length=160, unique=True)
+    title = models.CharField(max_length=200)
+    category = models.CharField(max_length=100)
+    summary = models.TextField()
+    body = models.TextField()
+    key_takeaways = models.JSONField(default=list, blank=True)
+    audience = models.CharField(max_length=80, default="patients")
+    language = models.CharField(max_length=12, default="en")
+    references = models.JSONField(default=list, blank=True)
+    emergency_disclaimer = models.TextField(default="For emergency symptoms, seek emergency care immediately.")
+    version = models.PositiveIntegerField(default=1)
+    effective_from = models.DateField()
+    expires_on = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="authored_health_content")
+    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="reviewed_health_content", null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    ai_provider = models.CharField(max_length=80, blank=True)
+    ai_model = models.CharField(max_length=80, blank=True)
+    ai_prompt_version = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        permissions = [("publish_healthcontent", "Can clinically approve and publish health content")]
+        constraints = [
+            models.CheckConstraint(condition=Q(expires_on__isnull=True) | Q(expires_on__gte=models.F("effective_from")), name="health_content_valid_dates"),
+            models.CheckConstraint(condition=~Q(status="published") | (Q(reviewer__isnull=False) & Q(reviewed_at__isnull=False)), name="published_health_content_reviewed"),
+        ]
+
+
 class PaymentMethod(TimestampedModel):
     code = models.CharField(max_length=32, unique=True)
     name = models.CharField(max_length=80, unique=True)

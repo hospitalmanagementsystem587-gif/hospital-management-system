@@ -18,6 +18,7 @@ from core.models import (
     AuditEvent,
     Bed,
     HealthPackage,
+    HealthContent,
     Service,
     Ward,
 )
@@ -72,6 +73,26 @@ class PublicCapacityAndPackageApiTests(TransactionTestCase):
         self.assertEqual([item["code"] for item in response.json()], ["WELLNESS"])
         self.assertEqual(response.json()[0]["price"], "999.00")
         self.assertEqual(response.json()[0]["included_services"], ["Complete blood count"])
+
+
+class PublicHealthContentApiTests(TransactionTestCase):
+    def test_only_reviewed_current_published_content_is_public(self):
+        client = APIClient()
+        author = User.objects.create_user("content-author")
+        reviewer = User.objects.create_user("clinical-reviewer", first_name="Clinical", last_name="Reviewer")
+        today = timezone.localdate()
+        common = dict(category="Wellness", summary="Reviewed summary", body="Reviewed content.", author=author)
+        HealthContent.objects.create(slug="visible", title="Visible", effective_from=today, status=HealthContent.Status.PUBLISHED, reviewer=reviewer, reviewed_at=timezone.now(), **common)
+        HealthContent.objects.create(slug="draft", title="Draft", effective_from=today, status=HealthContent.Status.DRAFT, **common)
+        HealthContent.objects.create(slug="expired", title="Expired", effective_from=today - timedelta(days=2), expires_on=today - timedelta(days=1), status=HealthContent.Status.PUBLISHED, reviewer=reviewer, reviewed_at=timezone.now(), **common)
+        HealthContent.objects.create(slug="future", title="Future", effective_from=today + timedelta(days=1), status=HealthContent.Status.PUBLISHED, reviewer=reviewer, reviewed_at=timezone.now(), **common)
+        HealthContent.objects.create(slug="superseded", title="Superseded", effective_from=today, status=HealthContent.Status.SUPERSEDED, reviewer=reviewer, reviewed_at=timezone.now(), **common)
+
+        response = client.get("/api/v1/health-content/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["slug"] for item in response.json()], ["visible"])
+        self.assertEqual(response.json()[0]["reviewer"], "Clinical Reviewer")
+        self.assertIn("max-age=300", response["Cache-Control"])
 
 
 class PatientApiTests(TransactionTestCase):

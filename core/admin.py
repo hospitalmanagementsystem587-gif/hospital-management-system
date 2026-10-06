@@ -1,12 +1,14 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin
+from django.utils import timezone
 
 from .models import (
     Department,
     HospitalFacility,
     HospitalFaq,
     HealthPackage,
+    HealthContent,
     HospitalSettings,
     Medicine,
     NumberSequence,
@@ -121,6 +123,23 @@ class HealthPackageAdmin(admin.ModelAdmin):
     list_filter = ("is_published", "valid_from", "valid_until")
     search_fields = ("code", "name", "description")
     filter_horizontal = ("included_services",)
+
+
+@admin.register(HealthContent)
+class HealthContentAdmin(admin.ModelAdmin):
+    list_display = ("title", "version", "status", "reviewer", "effective_from", "expires_on")
+    list_filter = ("status", "language", "audience")
+    search_fields = ("title", "summary", "body")
+    readonly_fields = ("reviewed_at",)
+
+    def save_model(self, request, obj, form, change):
+        if obj.status == HealthContent.Status.PUBLISHED:
+            if not request.user.has_perm("core.publish_healthcontent"):
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied("Clinical publishing permission is required.")
+            obj.reviewer = request.user
+            obj.reviewed_at = timezone.now()
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(PaymentMethod)

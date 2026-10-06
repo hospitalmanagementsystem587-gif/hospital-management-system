@@ -17,6 +17,7 @@ from core.models import (
     HospitalFacility,
     HospitalFaq,
     HealthPackage,
+    HealthContent,
     Ward,
     Bed,
     HospitalSettings,
@@ -48,6 +49,7 @@ from core.api.serializers import (
     HospitalFacilitySerializer,
     HospitalFaqSerializer,
     HealthPackageSerializer,
+    HealthContentSerializer,
     VisitTypeSerializer,
     AppointmentListSerializer,
     AppointmentDetailSerializer,
@@ -562,6 +564,21 @@ class OpdHistoricalMetricsView(APIView):
             },
             "hourly": hourly,
         })
+
+
+class HealthContentListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = HealthContentSerializer
+
+    def get_queryset(self):
+        from django.db.models import Q
+        today = timezone.localdate()
+        return HealthContent.objects.filter(status=HealthContent.Status.PUBLISHED, effective_from__lte=today).filter(Q(expires_on__isnull=True) | Q(expires_on__gte=today)).select_related("reviewer").order_by("category", "title")
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        response["Cache-Control"] = "public, max-age=300, stale-if-error=86400"
+        return response
 
 
 class VisitTypeListView(generics.ListAPIView):

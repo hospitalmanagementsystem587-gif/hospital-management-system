@@ -9,6 +9,7 @@ from core.models import (
     HospitalFacility,
     HospitalFaq,
     HealthPackage,
+    HealthContent,
     HospitalSettings,
     Medicine,
     Patient,
@@ -192,6 +193,17 @@ class HealthPackageSerializer(serializers.ModelSerializer):
             "id", "code", "name", "description", "included_services", "price",
             "eligibility", "fasting_instructions", "valid_from", "valid_until",
         ]
+
+
+class HealthContentSerializer(serializers.ModelSerializer):
+    reviewer = serializers.SerializerMethodField()
+
+    def get_reviewer(self, obj):
+        return obj.reviewer.get_full_name() or obj.reviewer.username
+
+    class Meta:
+        model = HealthContent
+        fields = ["slug", "title", "category", "summary", "body", "key_takeaways", "audience", "language", "references", "emergency_disclaimer", "version", "effective_from", "expires_on", "reviewer", "reviewed_at"]
 
 
 class VisitTypeSerializer(serializers.ModelSerializer):

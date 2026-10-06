@@ -37,6 +37,7 @@ urlpatterns = [
     path("bed-availability/", views.BedAvailabilityView.as_view(), name="bed_availability"),
     path("health-packages/", views.HealthPackageListView.as_view(), name="health_package_list"),
     path("opd/historical-metrics/", views.OpdHistoricalMetricsView.as_view(), name="opd_historical_metrics"),
+    path("health-content/", views.HealthContentListView.as_view(), name="health_content_list"),
     path("faqs/", views.HospitalFaqListView.as_view(), name="faq_list"),
     path("visit-types/", views.VisitTypeListView.as_view(), name="visit_type_list"),
 
