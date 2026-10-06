@@ -1,7 +1,20 @@
 # Task 004 — Doctor Directory, Hospital Content, Emergency Contacts and FAQ
 
-**Priority:** P1  
-**Depends on:** Task 002
+**Priority:** P1
+**Status:** Assigned to Antigravity — start now
+**Depends on:** Tasks 002 and 003 (merged)
+**Base:** latest `main` in both repositories
+**Branches:** `task-004-doctor-directory-content` in both repositories
+
+## Execution Instructions
+
+- Start from the latest remote `main` in both `hospital-management-system` and `hospital-vedant`; do not reuse the earlier paused Task 004 checkout.
+- Work in isolated worktrees so local or Codex work is not overwritten.
+- Do not modify Task 006 health-record/document models, APIs, storage, or Android cache except for a strictly necessary integration fix documented in the completion report.
+- Implement Django and Android together against one documented API contract. Do not leave production screens on hardcoded repositories after adding remote methods.
+- Run the complete Django and Android unit-test suites before pushing.
+- Push both Task 004 branches and create PRs against `main`; leave them ready for review and do not merge them.
+- Record exact commits, test counts, limitations, endpoints, migrations, and PR URLs in the completion report.
 
 ## Goal
 
