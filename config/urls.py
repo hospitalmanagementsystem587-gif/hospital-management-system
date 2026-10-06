@@ -6,6 +6,7 @@ from django.urls import include, path
 from core import views
 
 urlpatterns = [
+    path("api/v1/", include("core.api.urls")),
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
     path("accounts/login/", views.HospitalLoginView.as_view(), name="login"),
