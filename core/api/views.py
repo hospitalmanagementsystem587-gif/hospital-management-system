@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction, IntegrityError, OperationalError
 from django.utils import timezone
 from django.http import Http404
@@ -11,14 +12,27 @@ from core.forms import appointment_slot_conflicts
 from core.views import _audit_appointment_change
 from core.api.permissions import IsPatientUser
 from core.api.throttling import AppointmentWriteRateThrottle
+from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken
+from core.models import Patient, PatientAccount, PatientVerificationChallenge
+from core.services.numbering import next_number
+from core.services.verification import VerificationProvider
+from core.views import _audit_patient_change
+from core.api.throttling import AuthAnonRateThrottle
 from core.api.serializers import (
     PatientProfileSerializer,
+    PatientProfileUpdateSerializer,
+    OnboardingRequestOtpSerializer,
+    OnboardingRegisterSerializer,
+    OnboardingClaimPatientSerializer,
     DoctorSerializer,
     VisitTypeSerializer,
     AppointmentListSerializer,
     AppointmentDetailSerializer,
     AppointmentBookingSerializer,
 )
+
+User = get_user_model()
 
 
 class PatientProfileView(APIView):
@@ -28,6 +42,241 @@ class PatientProfileView(APIView):
         patient = request.user.patient_account.patient
         serializer = PatientProfileSerializer(patient)
         return Response(serializer.data)
+
+    def patch(self, request):
+        patient = request.user.patient_account.patient
+        serializer = PatientProfileUpdateSerializer(patient, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        changed_fields = list(serializer.validated_data.keys())
+        with transaction.atomic():
+            serializer.save()
+            _audit_patient_change(
+                request,
+                patient,
+                "patient.demographics_updated",
+                changed_fields,
+            )
+
+        full_serializer = PatientProfileSerializer(patient)
+        return Response(full_serializer.data)
+
+
+class OnboardingRequestOtpView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [AuthAnonRateThrottle]
+
+    def post(self, request):
+        serializer = OnboardingRequestOtpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        contact = serializer.validated_data["contact"].strip().lower()
+        purpose = serializer.validated_data["purpose"]
+
+        # Create challenge without exposing if contact exists or not
+        challenge, code = VerificationProvider.create_challenge(
+            contact=contact,
+            purpose=purpose,
+        )
+
+        response_data = {
+            "message": "If the contact is valid, a verification code has been dispatched.",
+            "expires_in_minutes": 10,
+        }
+        # In test / debug environment, attach the code for testing
+        if getattr(settings, "DEBUG", False):
+            response_data["_debug_code"] = code
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+class OnboardingRegisterView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [AuthAnonRateThrottle]
+
+    def post(self, request):
+        serializer = OnboardingRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        contact = serializer.validated_data["contact"].strip().lower()
+        code = serializer.validated_data["code"].strip()
+        full_name = serializer.validated_data["full_name"].strip()
+        password = serializer.validated_data["password"]
+        dob = serializer.validated_data.get("date_of_birth")
+        terms_version = serializer.validated_data["terms_version"]
+
+        is_valid, msg, challenge = VerificationProvider.verify_challenge(
+            contact=contact,
+            purpose=PatientVerificationChallenge.Purpose.REGISTRATION,
+            code=code,
+        )
+        if not is_valid:
+            return Response(
+                {
+                    "error": {
+                        "status_code": status.HTTP_400_BAD_REQUEST,
+                        "message": msg,
+                        "details": {"code": [msg]},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check username / user conflict
+        username = contact
+        if User.objects.filter(username=username).exists():
+            return Response(
+                {
+                    "error": {
+                        "status_code": status.HTTP_409_CONFLICT,
+                        "message": "An account already exists for this contact.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        with transaction.atomic():
+            # Server-issued MRN via NumberSequence
+            server_mrn = next_number("PATIENT")
+            is_email = "@" in contact
+            patient = Patient.objects.create(
+                mrn=server_mrn,
+                full_name=full_name,
+                phone="" if is_email else contact,
+                email=contact if is_email else "",
+                date_of_birth=dob,
+            )
+
+            user = User.objects.create_user(
+                username=username,
+                password=password,
+                first_name=full_name.split()[0] if full_name else "",
+            )
+
+            account = PatientAccount.objects.create(
+                user=user,
+                patient=patient,
+                is_verified=True,
+                phone_verified=not is_email,
+                email_verified=is_email,
+                terms_version_accepted=terms_version,
+                terms_accepted_at=timezone.now(),
+            )
+
+        # Generate JWT session
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "patient": PatientProfileSerializer(patient).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class OnboardingClaimPatientView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [AuthAnonRateThrottle]
+
+    def post(self, request):
+        serializer = OnboardingClaimPatientSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        mrn = serializer.validated_data["mrn"].strip()
+        contact = serializer.validated_data["contact"].strip().lower()
+        code = serializer.validated_data["code"].strip()
+        password = serializer.validated_data["password"]
+        terms_version = serializer.validated_data["terms_version"]
+
+        is_valid, msg, challenge = VerificationProvider.verify_challenge(
+            contact=contact,
+            purpose=PatientVerificationChallenge.Purpose.CLAIM_PATIENT,
+            code=code,
+        )
+        if not is_valid:
+            return Response(
+                {
+                    "error": {
+                        "status_code": status.HTTP_400_BAD_REQUEST,
+                        "message": msg,
+                        "details": {"code": [msg]},
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        patient = Patient.objects.filter(mrn=mrn).first()
+        patient_phone = (patient.phone or "").strip().lower() if patient else ""
+        patient_email = (patient.email or "").strip().lower() if patient else ""
+
+        # Uniform error response for nonexistent MRN or non-matching contact to prevent MRN enumeration
+        if not patient or (contact != patient_phone and contact != patient_email):
+            return Response(
+                {
+                    "error": {
+                        "status_code": status.HTTP_404_NOT_FOUND,
+                        "message": "Patient record with provided MRN and verified contact could not be verified. Please contact hospital reception.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Ensure patient does not already have an active linked account
+        if hasattr(patient, "account") and patient.account is not None:
+            return Response(
+                {
+                    "error": {
+                        "status_code": status.HTTP_409_CONFLICT,
+                        "message": "This patient record is already linked to an active mobile account.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        username = contact
+        if User.objects.filter(username=username).exists():
+            return Response(
+                {
+                    "error": {
+                        "status_code": status.HTTP_409_CONFLICT,
+                        "message": "An account with this contact already exists.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=username,
+                password=password,
+                first_name=patient.full_name.split()[0] if patient.full_name else "",
+            )
+            is_email = "@" in contact
+            account = PatientAccount.objects.create(
+                user=user,
+                patient=patient,
+                is_verified=True,
+                phone_verified=not is_email,
+                email_verified=is_email,
+                terms_version_accepted=terms_version,
+                terms_accepted_at=timezone.now(),
+            )
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "patient": PatientProfileSerializer(patient).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 
 class DoctorListView(generics.ListAPIView):

@@ -5,6 +5,9 @@ from core.forms import appointment_slot_conflicts
 
 
 class PatientProfileSerializer(serializers.ModelSerializer):
+    phone_verified = serializers.BooleanField(source="account.phone_verified", read_only=True)
+    email_verified = serializers.BooleanField(source="account.email_verified", read_only=True)
+
     class Meta:
         model = Patient
         fields = [
@@ -12,12 +15,56 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             "full_name",
             "date_of_birth",
             "phone",
+            "phone_verified",
             "email",
+            "email_verified",
             "emergency_contact_name",
             "emergency_contact_phone",
             "allergy_safety_notes",
         ]
-        read_only_fields = fields
+        read_only_fields = [
+            "mrn",
+            "phone_verified",
+            "email_verified",
+            "allergy_safety_notes",
+        ]
+
+
+class PatientProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Patient
+        fields = [
+            "email",
+            "address",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+        ]
+
+
+class OnboardingRequestOtpSerializer(serializers.Serializer):
+    contact = serializers.CharField(max_length=120)
+    purpose = serializers.ChoiceField(
+        choices=["registration", "claim_patient", "password_reset"]
+    )
+    terms_version = serializers.CharField(max_length=32, required=False, default="1.0")
+
+
+class OnboardingRegisterSerializer(serializers.Serializer):
+    contact = serializers.CharField(max_length=120)
+    code = serializers.CharField(max_length=16)
+    full_name = serializers.CharField(max_length=200)
+    password = serializers.CharField(min_length=8, write_only=True)
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
+    terms_version = serializers.CharField(max_length=32, default="1.0")
+
+
+class OnboardingClaimPatientSerializer(serializers.Serializer):
+    mrn = serializers.CharField(max_length=40)
+    contact = serializers.CharField(max_length=120)
+    code = serializers.CharField(max_length=16)
+    password = serializers.CharField(min_length=8, write_only=True)
+    terms_version = serializers.CharField(max_length=32, default="1.0")
+
 
 
 class DoctorSerializer(serializers.ModelSerializer):
