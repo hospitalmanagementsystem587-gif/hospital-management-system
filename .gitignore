@@ -13,6 +13,7 @@ venv/
 # Local data and generated files
 db.sqlite3
 media/
+private-media/
 staticfiles/
 
 # Tool caches

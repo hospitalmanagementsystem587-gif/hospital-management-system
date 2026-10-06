@@ -8,7 +8,7 @@ from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
@@ -42,6 +42,7 @@ from .models import (
     Medicine,
     MedicineBatch,
     Patient,
+    PatientDocument,
     Payment,
     PaymentMethod,
     PharmacySale,
@@ -59,6 +60,10 @@ from .models import (
     Ward,
 )
 from .services.numbering import next_number
+from .services.documents import (
+    open_validated_patient_document,
+    patient_document_download_name,
+)
 
 
 def _login_throttle_key(request, username):
@@ -759,6 +764,34 @@ def patient_document_upload(request, pk):
         else:
             messages.error(request, "Failed to upload document. Please check the file and try again.")
     return redirect("patient_detail", pk=patient.pk)
+
+
+@permission_required("core.view_patient", raise_exception=True)
+def patient_document_download(request, patient_pk, public_id):
+    patient = get_object_or_404(_patient_read_queryset(request.user), pk=patient_pk)
+    document = get_object_or_404(
+        PatientDocument.objects.filter(
+            patient=patient,
+            validation_status=PatientDocument.ValidationStatus.CLEAN,
+        ),
+        public_id=public_id,
+    )
+    try:
+        file_handle = open_validated_patient_document(document)
+    except FileNotFoundError:
+        raise Http404("Document not found")
+
+    response = FileResponse(
+        file_handle,
+        as_attachment=True,
+        filename=patient_document_download_name(document),
+        content_type=document.content_type,
+    )
+    response["Content-Length"] = str(document.size_bytes)
+    response["Cache-Control"] = "private, no-store"
+    response["Pragma"] = "no-cache"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 
@@ -1954,4 +1987,3 @@ def admission_discharge(request, pk):
             messages.error(request, "Failed to process discharge. Please check all fields.")
 
     return redirect("admission_detail", pk=admission.pk)
-

@@ -1,5 +1,3 @@
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.urls import include, path
 
@@ -18,6 +16,11 @@ urlpatterns = [
         "patients/<int:pk>/documents/upload/",
         views.patient_document_upload,
         name="patient_document_upload",
+    ),
+    path(
+        "patients/<int:patient_pk>/documents/<uuid:public_id>/download/",
+        views.patient_document_download,
+        name="staff_patient_document_download",
     ),
     path("ipd/admissions/", views.admission_list, name="admission_list"),
     path("ipd/admissions/create/", views.admission_create, name="admission_create"),
@@ -128,6 +131,3 @@ urlpatterns = [
 ]
 
 urlpatterns += staticfiles_urlpatterns()
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

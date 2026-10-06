@@ -1,8 +1,12 @@
 from decimal import Decimal
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
+
+from .storage import private_patient_document_storage
 
 
 
@@ -231,6 +235,19 @@ class Consultation(TimestampedModel):
     diagnosis = models.TextField(blank=True)
     follow_up_date = models.DateField(null=True, blank=True)
     follow_up_note = models.TextField(blank=True)
+    patient_released_at = models.DateTimeField(null=True, blank=True)
+    patient_access_revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(patient_access_revoked_at__isnull=True)
+                    | Q(patient_released_at__isnull=False)
+                ),
+                name="consultation_revoke_after_release",
+            )
+        ]
 
 
 class Prescription(TimestampedModel):
@@ -780,14 +797,33 @@ class PatientDocument(TimestampedModel):
         DISCHARGE_SUMMARY = "discharge", "Discharge Summary"
         OTHER = "other", "Other Clinical Document"
 
+    class ValidationStatus(models.TextChoices):
+        PENDING = "pending", "Pending malware scan"
+        CLEAN = "clean", "Validated clean"
+        REJECTED = "rejected", "Rejected"
+
     patient = models.ForeignKey(
         Patient, on_delete=models.CASCADE, related_name="documents"
     )
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     document_type = models.CharField(
         max_length=24, choices=DocumentType.choices, default=DocumentType.PRESCRIPTION
     )
     title = models.CharField(max_length=200)
-    file = models.FileField(upload_to="patient_documents/%Y/%m/")
+    file = models.FileField(
+        upload_to="patient_documents/%Y/%m/",
+        storage=private_patient_document_storage,
+    )
+    content_type = models.CharField(max_length=100, blank=True)
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    sha256 = models.CharField(max_length=64, blank=True)
+    validation_status = models.CharField(
+        max_length=12,
+        choices=ValidationStatus.choices,
+        default=ValidationStatus.PENDING,
+    )
+    patient_released_at = models.DateTimeField(null=True, blank=True)
+    patient_access_revoked_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
     uploaded_by = models.ForeignKey(
         StaffProfile,
@@ -799,6 +835,26 @@ class PatientDocument(TimestampedModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(validation_status__in=["pending", "clean", "rejected"]),
+                name="patient_document_validation_valid",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(patient_released_at__isnull=True)
+                    | Q(validation_status="clean")
+                ),
+                name="patient_document_release_clean",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(patient_access_revoked_at__isnull=True)
+                    | Q(patient_released_at__isnull=False)
+                ),
+                name="patient_document_revoke_after_release",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.get_document_type_display()}) - {self.patient.mrn}"
@@ -991,5 +1047,3 @@ class PatientVerificationChallenge(TimestampedModel):
         indexes = [
             models.Index(fields=["contact", "purpose", "is_used"], name="chal_contact_purp_idx"),
         ]
-
-
