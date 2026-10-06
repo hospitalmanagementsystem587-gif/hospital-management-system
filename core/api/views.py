@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from core.models import (
+    Adjustment,
     Appointment,
     AuditEvent,
     Consultation,
@@ -17,8 +18,12 @@ from core.models import (
     HospitalFacility,
     HospitalFaq,
     HospitalSettings,
+    Invoice,
+    InvoiceLine,
     PatientDocument,
+    Payment,
     Prescription,
+    Refund,
     StaffProfile,
     VisitType,
 )
@@ -53,6 +58,9 @@ from core.api.serializers import (
     PatientDocumentSerializer,
     PrescriptionDetailSerializer,
     PrescriptionListSerializer,
+    PatientInvoiceListSerializer,
+    PatientInvoiceDetailSerializer,
+    PatientReceiptSerializer,
 )
 from core.services.documents import (
     open_validated_patient_document,
@@ -746,3 +754,68 @@ class PatientDocumentDownloadView(PatientClinicalAPIView):
         response["X-Content-Type-Options"] = "nosniff"
         patch_vary_headers(response, ("Authorization",))
         return response
+
+
+class PatientInvoiceListView(APIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request):
+        patient = request.user.patient_account.patient
+        # Only show issued or voided invoices belonging to the patient (exclude drafts)
+        invoices = (
+            Invoice.objects.filter(patient=patient, status__in=[Invoice.Status.ISSUED, Invoice.Status.VOIDED])
+            .prefetch_related("payments", "adjustments")
+            .order_by("-created_at")
+        )
+        serializer = PatientInvoiceListSerializer(invoices, many=True)
+        return Response(serializer.data)
+
+
+class PatientInvoiceDetailView(APIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request, pk):
+        patient = request.user.patient_account.patient
+        try:
+            invoice = (
+                Invoice.objects.filter(patient=patient, status__in=[Invoice.Status.ISSUED, Invoice.Status.VOIDED])
+                .prefetch_related("lines", "payments__method", "adjustments")
+                .get(pk=pk)
+            )
+        except Invoice.DoesNotExist:
+            raise Http404("Invoice not found")
+        serializer = PatientInvoiceDetailSerializer(invoice)
+        return Response(serializer.data)
+
+
+class PatientReceiptDetailView(APIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request, receipt_number):
+        patient = request.user.patient_account.patient
+        try:
+            payment = (
+                Payment.objects.select_related("invoice", "invoice__patient", "method")
+                .filter(invoice__patient=patient)
+                .get(receipt_number=receipt_number)
+            )
+        except Payment.DoesNotExist:
+            raise Http404("Receipt not found")
+        serializer = PatientReceiptSerializer(payment)
+        return Response(serializer.data)
+
+
+class PatientPaymentInitiateView(APIView):
+    permission_classes = [IsPatientUser]
+
+    def post(self, request, pk):
+        # Online payment gateway has not been configured by owner yet
+        return Response(
+            {
+                "detail": "Online payments are currently disabled pending payment gateway credentials configuration. Please settle bills at the hospital billing desk.",
+                "enabled": False,
+                "supported_offline_methods": ["Cash at Counter", "Card / POS Terminal", "Hospital Desk UPI"],
+            },
+            status=status.HTTP_501_NOT_IMPLEMENTED,
+        )
+

@@ -7,10 +7,17 @@ from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from decimal import Decimal
 from core.models import (
+    Adjustment,
     Department,
+    Invoice,
+    InvoiceLine,
     Patient,
     PatientAccount,
+    Payment,
+    PaymentMethod,
+    Refund,
     StaffProfile,
     VisitType,
     Appointment,
@@ -362,7 +369,21 @@ class PatientApiTests(TransactionTestCase):
     def test_concurrent_booking_slot_conflict_prevention(self):
         from rest_framework_simplejwt.tokens import RefreshToken
         import threading
-        slot_time = timezone.now() + timedelta(days=7, hours=10)
+        concurrent_doc_user = User.objects.create_user(
+            username="concurrent_doc",
+            password="DoctorPass123!",
+            first_name="Concurrent",
+            last_name="Doctor",
+            is_active=True,
+        )
+        concurrent_doc_user.groups.add(self.doctor_group)
+        concurrent_doc = StaffProfile.objects.create(
+            user=concurrent_doc_user,
+            employee_id="DOC_CONCURRENT",
+            department=self.dept,
+            is_public=True,
+        )
+        slot_time = timezone.now() + timedelta(days=14, hours=10)
         results = []
 
         def book(user):
@@ -373,7 +394,7 @@ class PatientApiTests(TransactionTestCase):
             res = client.post(
                 "/api/v1/appointments/",
                 {
-                    "doctor": self.doctor_profile.id,
+                    "doctor": concurrent_doc.id,
                     "visit_type": self.visit_type.id,
                     "scheduled_at": slot_time.isoformat(),
                 },
@@ -679,4 +700,115 @@ class PatientApiTests(TransactionTestCase):
         self.assertEqual(res_search.status_code, status.HTTP_200_OK)
         self.assertEqual(len(res_search.data), 1)
         self.assertEqual(res_search.data[0]["question"], "What are the visiting hours?")
+
+    def test_patient_billing_invoices_and_isolation(self):
+        # Create payment method
+        method = PaymentMethod.objects.create(name="Cash", is_active=True)
+
+        # Create issued invoice for patient1
+        inv1 = Invoice.objects.create(
+            number="INV-2026-0001",
+            patient=self.patient1,
+            status=Invoice.Status.ISSUED,
+            subtotal=Decimal("1500.00"),
+            tax_total=Decimal("0.00"),
+            discount_total=Decimal("0.00"),
+            total=Decimal("1500.00"),
+            issued_at=timezone.now(),
+        )
+        line1 = InvoiceLine.objects.create(
+            invoice=inv1,
+            description="General OPD Consultation",
+            quantity=1,
+            unit_price=Decimal("500.00"),
+            line_total=Decimal("500.00"),
+        )
+        line2 = InvoiceLine.objects.create(
+            invoice=inv1,
+            description="Complete Blood Count (CBC)",
+            quantity=1,
+            unit_price=Decimal("1000.00"),
+            line_total=Decimal("1000.00"),
+        )
+        # Payment for inv1
+        pay1 = Payment.objects.create(
+            receipt_number="RCP-2026-0001",
+            invoice=inv1,
+            method=method,
+            amount=Decimal("500.00"),
+            reference="CASH-COUNTER-01",
+            received_at=timezone.now(),
+        )
+
+        # Create draft invoice for patient1 (must be excluded from patient view)
+        inv_draft = Invoice.objects.create(
+            number="INV-2026-DRAFT",
+            patient=self.patient1,
+            status=Invoice.Status.DRAFT,
+            subtotal=Decimal("200.00"),
+            total=Decimal("200.00"),
+        )
+
+        # Create invoice for patient2 (must be isolated)
+        inv2 = Invoice.objects.create(
+            number="INV-2026-0002",
+            patient=self.patient2,
+            status=Invoice.Status.ISSUED,
+            subtotal=Decimal("3000.00"),
+            total=Decimal("3000.00"),
+            issued_at=timezone.now(),
+        )
+
+        # Authenticate as patient1
+        self._auth(self.patient1_user)
+
+        # List invoices
+        res = self.client.get("/api/v1/me/invoices/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        inv_numbers = [i["number"] for i in res.data]
+        self.assertIn("INV-2026-0001", inv_numbers)
+        self.assertNotIn("INV-2026-DRAFT", inv_numbers)
+        self.assertNotIn("INV-2026-0002", inv_numbers)
+
+        # Check decimal string serialization
+        inv_data = res.data[0]
+        self.assertEqual(inv_data["subtotal"], "1500.00")
+        self.assertEqual(inv_data["total"], "1500.00")
+        self.assertEqual(inv_data["paid_total"], "500.00")
+        self.assertEqual(inv_data["outstanding_balance"], "1000.00")
+        self.assertEqual(inv_data["currency"], "INR")
+        self.assertFalse(inv_data["is_settled"])
+
+        # Detail of owned invoice
+        res_detail = self.client.get(f"/api/v1/me/invoices/{inv1.pk}/")
+        self.assertEqual(res_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_detail.data["lines"]), 2)
+        self.assertEqual(len(res_detail.data["payments"]), 1)
+        self.assertEqual(res_detail.data["payments"][0]["receipt_number"], "RCP-2026-0001")
+        self.assertEqual(res_detail.data["payments"][0]["amount"], "500.00")
+
+        # Isolation test: accessing other patient's invoice returns 404
+        res_other = self.client.get(f"/api/v1/me/invoices/{inv2.pk}/")
+        self.assertEqual(res_other.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Isolation test: accessing draft invoice returns 404
+        res_draft = self.client.get(f"/api/v1/me/invoices/{inv_draft.pk}/")
+        self.assertEqual(res_draft.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Receipt detail of owned payment
+        res_rcp = self.client.get("/api/v1/me/receipts/RCP-2026-0001/")
+        self.assertEqual(res_rcp.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_rcp.data["receipt_number"], "RCP-2026-0001")
+        self.assertEqual(res_rcp.data["amount"], "500.00")
+        self.assertEqual(res_rcp.data["patient_mrn"], self.patient1.mrn)
+
+        # Accessing non-existent or other patient receipt returns 404
+        res_rcp_fake = self.client.get("/api/v1/me/receipts/RCP-NONEXISTENT/")
+        self.assertEqual(res_rcp_fake.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Payment endpoint returns disabled 501
+        res_pay = self.client.post(f"/api/v1/me/invoices/{inv1.pk}/pay/")
+        self.assertEqual(res_pay.status_code, status.HTTP_501_NOT_IMPLEMENTED)
+        self.assertFalse(res_pay.data["enabled"])
+
 

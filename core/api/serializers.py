@@ -3,17 +3,23 @@ from django.utils import timezone
 from django.urls import reverse
 
 from core.models import (
+    Adjustment,
     Appointment,
     Consultation,
     Department,
     HospitalFacility,
     HospitalFaq,
     HospitalSettings,
+    Invoice,
+    InvoiceLine,
     Medicine,
     Patient,
     PatientDocument,
+    Payment,
+    PaymentMethod,
     Prescription,
     PrescriptionItem,
+    Refund,
     StaffProfile,
     VisitType,
 )
@@ -420,3 +426,150 @@ class PatientDocumentSerializer(serializers.ModelSerializer):
 
     def get_download_url(self, obj):
         return reverse("patient_document_download", kwargs={"public_id": obj.public_id})
+
+
+class PatientInvoiceLineSerializer(serializers.ModelSerializer):
+    unit_price = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    discount_amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    line_total = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+
+    class Meta:
+        model = InvoiceLine
+        fields = [
+            "id",
+            "description",
+            "quantity",
+            "unit_price",
+            "tax_rate",
+            "discount_amount",
+            "line_total",
+        ]
+
+
+class PatientRefundSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+
+    class Meta:
+        model = Refund
+        fields = [
+            "id",
+            "amount",
+            "reason",
+            "status",
+            "created_at",
+        ]
+
+
+class PatientPaymentSerializer(serializers.ModelSerializer):
+    method = serializers.CharField(source="method.name", read_only=True)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    receipt_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "receipt_number",
+            "method",
+            "amount",
+            "reference",
+            "received_at",
+            "receipt_url",
+        ]
+
+    def get_receipt_url(self, obj):
+        return reverse("patient_receipt_detail", kwargs={"receipt_number": obj.receipt_number})
+
+
+class PatientAdjustmentSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+
+    class Meta:
+        model = Adjustment
+        fields = [
+            "id",
+            "amount",
+            "reason",
+            "created_at",
+        ]
+
+
+class PatientInvoiceListSerializer(serializers.ModelSerializer):
+    subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    tax_total = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    discount_total = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    total = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    paid_total = serializers.SerializerMethodField()
+    outstanding_balance = serializers.SerializerMethodField()
+    currency = serializers.CharField(default="INR", read_only=True)
+    is_settled = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "id",
+            "number",
+            "status",
+            "issued_at",
+            "created_at",
+            "subtotal",
+            "tax_total",
+            "discount_total",
+            "total",
+            "paid_total",
+            "outstanding_balance",
+            "currency",
+            "is_settled",
+        ]
+
+    def get_paid_total(self, obj):
+        from decimal import Decimal
+        from django.db.models import Sum
+        paid = obj.payments.aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
+        return f"{paid:.2f}"
+
+    def get_outstanding_balance(self, obj):
+        from core.views import _invoice_outstanding
+        bal = _invoice_outstanding(obj)
+        return f"{bal:.2f}"
+
+    def get_is_settled(self, obj):
+        from core.views import _invoice_outstanding
+        return _invoice_outstanding(obj) <= 0
+
+
+class PatientInvoiceDetailSerializer(PatientInvoiceListSerializer):
+    lines = PatientInvoiceLineSerializer(many=True, read_only=True)
+    payments = PatientPaymentSerializer(many=True, read_only=True)
+    adjustments = PatientAdjustmentSerializer(many=True, read_only=True)
+
+    class Meta(PatientInvoiceListSerializer.Meta):
+        fields = PatientInvoiceListSerializer.Meta.fields + [
+            "lines",
+            "payments",
+            "adjustments",
+        ]
+
+
+class PatientReceiptSerializer(serializers.ModelSerializer):
+    method = serializers.CharField(source="method.name", read_only=True)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=True)
+    invoice_number = serializers.CharField(source="invoice.number", read_only=True)
+    patient_mrn = serializers.CharField(source="invoice.patient.mrn", read_only=True)
+    patient_name = serializers.CharField(source="invoice.patient.full_name", read_only=True)
+    currency = serializers.CharField(default="INR", read_only=True)
+
+    class Meta:
+        model = Payment
+        fields = [
+            "receipt_number",
+            "invoice_number",
+            "patient_mrn",
+            "patient_name",
+            "amount",
+            "currency",
+            "method",
+            "reference",
+            "received_at",
+        ]
+
