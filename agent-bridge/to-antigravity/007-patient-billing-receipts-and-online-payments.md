@@ -3,6 +3,10 @@
 **Priority:** P1  
 **Depends on:** Tasks 002 and 003
 
+## Assignment
+
+Assigned to Antigravity after Task 004 review fixes. Start from the latest merged `main` in isolated HMS and Android worktrees on `task-007-patient-billing-payments`. Push PRs for review; do not merge. Do not begin Task 008 until Task 007 is complete and handed off.
+
 ## Goal
 
 Expose the authoritative Django billing ledger safely to patients and prepare a real, auditable online-payment workflow without reusing the Android app's simulated settlement logic.
