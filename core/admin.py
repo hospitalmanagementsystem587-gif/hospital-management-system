@@ -4,6 +4,8 @@ from django.contrib.auth.admin import UserAdmin
 
 from .models import (
     Department,
+    HospitalFacility,
+    HospitalFaq,
     HospitalSettings,
     Medicine,
     NumberSequence,
@@ -131,3 +133,17 @@ class MedicineAdmin(admin.ModelAdmin):
     list_display = ("code", "generic_name", "brand_name", "unit", "is_otc", "is_active")
     list_filter = ("is_active", "is_otc", "dosage_form")
     search_fields = ("code", "generic_name", "brand_name", "barcode")
+
+
+@admin.register(HospitalFacility)
+class HospitalFacilityAdmin(admin.ModelAdmin):
+    list_display = ("title", "category", "highlight", "display_order", "is_active")
+    list_filter = ("is_active", "category")
+    search_fields = ("title", "category", "description")
+
+
+@admin.register(HospitalFaq)
+class HospitalFaqAdmin(admin.ModelAdmin):
+    list_display = ("question", "category", "highlight_tag", "display_order", "is_active")
+    list_filter = ("is_active", "category")
+    search_fields = ("question", "answer", "category")

@@ -5,6 +5,9 @@ from django.urls import reverse
 from core.models import (
     Appointment,
     Consultation,
+    Department,
+    HospitalFacility,
+    HospitalFaq,
     HospitalSettings,
     Medicine,
     Patient,
@@ -94,10 +97,89 @@ class DoctorSerializer(serializers.ModelSerializer):
             "department_name",
             "department_code",
             "job_title",
+            "qualifications",
+            "experience_years",
+            "languages",
+            "opd_room",
+            "opd_schedule",
+            "consultation_fee",
+            "biography",
         ]
 
     def get_full_name(self, obj):
         return obj.user.get_full_name() or obj.user.username
+
+
+class DepartmentDetailSerializer(serializers.ModelSerializer):
+    doctor_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Department
+        fields = [
+            "id",
+            "code",
+            "name",
+            "description",
+            "icon_name",
+            "display_order",
+            "doctor_count",
+        ]
+
+    def get_doctor_count(self, obj):
+        return obj.staff.filter(
+            user__groups__name="Doctor",
+            user__is_active=True,
+            is_public=True,
+        ).count()
+
+
+class HospitalInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HospitalSettings
+        fields = [
+            "name",
+            "tagline",
+            "timezone",
+            "currency_code",
+            "phone",
+            "emergency_phone",
+            "emergency_phone_display",
+            "ambulance_phone",
+            "ambulance_phone_display",
+            "reception_phone",
+            "reception_phone_display",
+            "email",
+            "address",
+            "landmark",
+            "city",
+            "maps_query",
+        ]
+
+
+class HospitalFacilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HospitalFacility
+        fields = [
+            "id",
+            "title",
+            "category",
+            "description",
+            "highlight",
+            "display_order",
+        ]
+
+
+class HospitalFaqSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HospitalFaq
+        fields = [
+            "id",
+            "question",
+            "answer",
+            "category",
+            "highlight_tag",
+            "display_order",
+        ]
 
 
 class VisitTypeSerializer(serializers.ModelSerializer):

@@ -13,6 +13,10 @@ from core.models import (
     Appointment,
     AuditEvent,
     Consultation,
+    Department,
+    HospitalFacility,
+    HospitalFaq,
+    HospitalSettings,
     PatientDocument,
     Prescription,
     StaffProfile,
@@ -36,6 +40,10 @@ from core.api.serializers import (
     OnboardingRegisterSerializer,
     OnboardingClaimPatientSerializer,
     DoctorSerializer,
+    DepartmentDetailSerializer,
+    HospitalInfoSerializer,
+    HospitalFacilitySerializer,
+    HospitalFaqSerializer,
     VisitTypeSerializer,
     AppointmentListSerializer,
     AppointmentDetailSerializer,
@@ -299,7 +307,38 @@ class OnboardingClaimPatientView(APIView):
 
 
 class DoctorListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    serializer_class = DoctorSerializer
+
+    def get_queryset(self):
+        qs = (
+            StaffProfile.objects.filter(
+                user__groups__name="Doctor",
+                user__is_active=True,
+                department__is_active=True,
+                is_public=True,
+            )
+            .select_related("user", "department")
+            .order_by("user__first_name", "user__last_name", "pk")
+        )
+        dept = self.request.query_params.get("department")
+        if dept:
+            qs = qs.filter(department__code__iexact=dept) | qs.filter(department__name__iexact=dept)
+        search = self.request.query_params.get("search")
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(user__first_name__icontains=search)
+                | Q(user__last_name__icontains=search)
+                | Q(department__name__icontains=search)
+                | Q(qualifications__icontains=search)
+                | Q(biography__icontains=search)
+            )
+        return qs
+
+
+class DoctorDetailView(generics.RetrieveAPIView):
+    permission_classes = [AllowAny]
     serializer_class = DoctorSerializer
 
     def get_queryset(self):
@@ -308,10 +347,73 @@ class DoctorListView(generics.ListAPIView):
                 user__groups__name="Doctor",
                 user__is_active=True,
                 department__is_active=True,
+                is_public=True,
             )
             .select_related("user", "department")
-            .order_by("user__first_name", "user__last_name", "pk")
         )
+
+
+class DepartmentListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = DepartmentDetailSerializer
+
+    def get_queryset(self):
+        return Department.objects.filter(is_active=True).order_by("display_order", "name")
+
+
+class HospitalInfoView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        hospital = HospitalSettings.objects.filter(pk=1).first()
+        if not hospital:
+            hospital = HospitalSettings.objects.create(
+                pk=1,
+                name="Vedant Hospital",
+                tagline="Multi-Speciality Care, Advanced Surgery & 24x7 Emergency",
+                phone="+919415012345",
+                emergency_phone="102",
+                emergency_phone_display="+91 94150 12345 / 102",
+                ambulance_phone="108",
+                ambulance_phone_display="+91 94150 12346 / 108",
+                reception_phone="+915222418900",
+                reception_phone_display="+91 (0522) 2418900",
+                email="contact@vedanthospitallucknow.com",
+                address="Hardoi Road, Near Raj State, Kanpur Ring Road, Rajaji Puram, Lucknow-226017, Uttar Pradesh",
+                landmark="Near Raj State, Kanpur Ring Road Intersection",
+                city="Lucknow, Uttar Pradesh - 226017",
+                maps_query="Vedant Hospital, Hardoi Road, Rajajipuram, Lucknow",
+            )
+        serializer = HospitalInfoSerializer(hospital)
+        return Response(serializer.data)
+
+
+class HospitalFacilityListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = HospitalFacilitySerializer
+
+    def get_queryset(self):
+        qs = HospitalFacility.objects.filter(is_active=True).order_by("display_order", "id")
+        category = self.request.query_params.get("category")
+        if category:
+            qs = qs.filter(category__iexact=category)
+        return qs
+
+
+class HospitalFaqListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = HospitalFaqSerializer
+
+    def get_queryset(self):
+        qs = HospitalFaq.objects.filter(is_active=True).order_by("display_order", "id")
+        category = self.request.query_params.get("category")
+        if category:
+            qs = qs.filter(category__iexact=category)
+        search = self.request.query_params.get("search")
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(Q(question__icontains=search) | Q(answer__icontains=search))
+        return qs
 
 
 class VisitTypeListView(generics.ListAPIView):

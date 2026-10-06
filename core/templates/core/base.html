@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'core/style.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'core/combobox.css' %}?v=1">
     {% if POSTHOG_KEY %}
     <script>
       !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
@@ -142,8 +143,8 @@
       <main class="public-main">{% block public_content %}{% endblock %}</main>
       <footer class="public-footer">
         <span>&copy; {% now "Y" %} {% if hospital.name and hospital.name != 'Hospital name not configured' %}{{ hospital.name }}{% else %}Vedant Hospital{% endif %}</span>
-        <span>Hardoi Road, Rajajipuram, Lucknow</span>
-        <span>Emergency: <strong>102</strong></span>
+        <span>{% if hospital.address %}{{ hospital.address }}{% else %}Hardoi Road, Rajajipuram, Lucknow{% endif %}</span>
+        <span>Emergency: <strong>{% if hospital.emergency_phone_display %}{{ hospital.emergency_phone_display }}{% elif hospital.emergency_phone %}{{ hospital.emergency_phone }}{% else %}102{% endif %}</strong></span>
       </footer>
     {% endif %}
 
@@ -161,6 +162,7 @@
         document.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
       })();
     </script>
+    <script src="{% static 'core/combobox.js' %}?v=1"></script>
     {% if CLOUDFLARE_ANALYTICS_TOKEN %}
     <!-- Cloudflare Web Analytics -->
     <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "{{ CLOUDFLARE_ANALYTICS_TOKEN }}"}'></script>
