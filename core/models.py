@@ -21,7 +21,13 @@ class TimestampedModel(models.Model):
 class Department(TimestampedModel):
     code = models.CharField(max_length=32, unique=True)
     name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    icon_name = models.CharField(max_length=40, default="medical_services", blank=True)
+    display_order = models.PositiveSmallIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
 
 
 class StaffProfile(TimestampedModel):
@@ -39,6 +45,14 @@ class StaffProfile(TimestampedModel):
         related_name="staff",
     )
     job_title = models.CharField(max_length=120, blank=True)
+    qualifications = models.CharField(max_length=200, blank=True)
+    experience_years = models.PositiveSmallIntegerField(default=0)
+    languages = models.CharField(max_length=120, default="Hindi, English", blank=True)
+    opd_room = models.CharField(max_length=64, blank=True)
+    opd_schedule = models.CharField(max_length=160, blank=True)
+    consultation_fee = models.PositiveIntegerField(default=500)
+    biography = models.TextField(blank=True)
+    is_public = models.BooleanField(default=True)
 
     def __str__(self):
         display_name = self.user.get_full_name() or self.user.get_username()
@@ -48,15 +62,56 @@ class StaffProfile(TimestampedModel):
 class HospitalSettings(TimestampedModel):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     name = models.CharField(max_length=200)
+    tagline = models.CharField(max_length=255, blank=True)
     timezone = models.CharField(max_length=64, default="Asia/Kolkata")
     currency_code = models.CharField(max_length=3, default="INR")
     phone = models.CharField(max_length=32, blank=True)
+    emergency_phone = models.CharField(max_length=32, default="102", blank=True)
+    emergency_phone_display = models.CharField(max_length=64, default="102 / 108", blank=True)
+    ambulance_phone = models.CharField(max_length=32, default="108", blank=True)
+    ambulance_phone_display = models.CharField(max_length=64, default="108", blank=True)
+    reception_phone = models.CharField(max_length=32, blank=True)
+    reception_phone_display = models.CharField(max_length=64, blank=True)
+    email = models.EmailField(blank=True)
     address = models.TextField(blank=True)
+    landmark = models.CharField(max_length=200, blank=True)
+    city = models.CharField(max_length=100, default="Lucknow, Uttar Pradesh", blank=True)
+    maps_query = models.CharField(max_length=255, blank=True)
 
     class Meta:
         constraints = [
             models.CheckConstraint(condition=Q(id=1), name="hospital_settings_one_row")
         ]
+
+
+class HospitalFacility(TimestampedModel):
+    title = models.CharField(max_length=120)
+    category = models.CharField(max_length=60, default="General")
+    description = models.TextField()
+    highlight = models.CharField(max_length=120, blank=True)
+    display_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["display_order", "title"]
+
+    def __str__(self):
+        return f"{self.title} ({self.category})"
+
+
+class HospitalFaq(TimestampedModel):
+    question = models.CharField(max_length=255)
+    answer = models.TextField()
+    category = models.CharField(max_length=80, default="General Information")
+    highlight_tag = models.CharField(max_length=80, blank=True)
+    display_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["display_order", "id"]
+
+    def __str__(self):
+        return self.question
 
 
 class NumberSequence(TimestampedModel):

@@ -1,0 +1,242 @@
+/* ==========================================================================
+   shadcn/ui Inspired Combobox / Searchable Select System
+   ========================================================================== */
+
+.shadcn-combobox {
+  position: relative;
+  width: 100%;
+  font-family: var(--font-sans);
+}
+
+/* Hidden native select for standard HTML form submission */
+.shadcn-combobox select.shadcn-hidden-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Trigger Button */
+.shadcn-combobox-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  color: #0f172a;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  text-align: left;
+  user-select: none;
+}
+
+.shadcn-combobox-trigger:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.shadcn-combobox-trigger:focus-visible,
+.shadcn-combobox[data-state="open"] .shadcn-combobox-trigger {
+  outline: none;
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgb(2 132 199 / 0.15);
+}
+
+.shadcn-combobox-trigger[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f1f5f9;
+}
+
+/* Integration inside .appointment-input-shell where leading SVG icon exists */
+.appointment-input-shell .shadcn-combobox-trigger {
+  min-height: 48px;
+  padding-left: 44px;
+  border-radius: 10px;
+  background-color: #fbfcfd;
+  border-color: #d6e0e5;
+  font-size: 0.84rem;
+}
+
+.appointment-input-shell .shadcn-combobox-trigger:hover {
+  border-color: #bdccd3;
+}
+
+.appointment-input-shell .shadcn-combobox[data-state="open"] .shadcn-combobox-trigger,
+.appointment-input-shell .shadcn-combobox-trigger:focus-visible {
+  border-color: #168eaa;
+  box-shadow: 0 0 0 3px rgb(22 142 170 / 0.12);
+  background-color: #ffffff;
+}
+
+/* Value display inside trigger */
+.shadcn-combobox-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.shadcn-combobox-placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* Chevron Icon */
+.shadcn-combobox-icon {
+  margin-left: 0.5rem;
+  color: #64748b;
+  flex-shrink: 0;
+  transition: transform 0.15s ease-in-out;
+}
+
+.shadcn-combobox[data-state="open"] .shadcn-combobox-icon {
+  transform: rotate(180deg);
+}
+
+/* Popover Content */
+.shadcn-combobox-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  min-width: 220px;
+  max-width: 100%;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  display: none;
+  overflow: hidden;
+  animation: shadcn-popover-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.shadcn-combobox[data-state="open"] .shadcn-combobox-popover {
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes shadcn-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Search Header */
+.shadcn-combobox-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  background-color: #ffffff;
+}
+
+.shadcn-combobox-search-icon {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.shadcn-combobox-search-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 0.875rem;
+  color: #0f172a;
+  outline: none;
+}
+
+.shadcn-combobox-search-input::placeholder {
+  color: #94a3b8;
+}
+
+/* Options List */
+.shadcn-combobox-list {
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 0.25rem;
+  overscroll-behavior: contain;
+}
+
+/* Custom subtle scrollbar */
+.shadcn-combobox-list::-webkit-scrollbar {
+  width: 6px;
+}
+.shadcn-combobox-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.shadcn-combobox-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+/* Individual Item */
+.shadcn-combobox-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.875rem;
+  color: #334155;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.shadcn-combobox-item:hover,
+.shadcn-combobox-item[data-highlighted="true"] {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.shadcn-combobox-item[data-selected="true"] {
+  background-color: #e0f2fe;
+  color: #0284c7;
+  font-weight: 600;
+}
+
+.shadcn-combobox-item-check {
+  margin-left: auto;
+  color: #0284c7;
+  display: none;
+  flex-shrink: 0;
+}
+
+.shadcn-combobox-item[data-selected="true"] .shadcn-combobox-item-check {
+  display: block;
+}
+
+.shadcn-combobox-empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+}

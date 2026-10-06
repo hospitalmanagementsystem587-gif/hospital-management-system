@@ -28,8 +28,13 @@ urlpatterns = [
     # Patient profile
     path("me/", views.PatientProfileView.as_view(), name="patient_profile"),
 
-    # Catalog endpoints
+    # Catalog & Public content endpoints
     path("doctors/", views.DoctorListView.as_view(), name="doctor_list"),
+    path("doctors/<int:pk>/", views.DoctorDetailView.as_view(), name="doctor_detail"),
+    path("departments/", views.DepartmentListView.as_view(), name="department_list"),
+    path("hospital-info/", views.HospitalInfoView.as_view(), name="hospital_info"),
+    path("facilities/", views.HospitalFacilityListView.as_view(), name="facility_list"),
+    path("faqs/", views.HospitalFaqListView.as_view(), name="faq_list"),
     path("visit-types/", views.VisitTypeListView.as_view(), name="visit_type_list"),
 
     # Appointment endpoints

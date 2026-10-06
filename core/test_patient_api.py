@@ -581,3 +581,102 @@ class PatientApiTests(TransactionTestCase):
             ).exists()
         )
 
+    def test_public_doctor_directory_and_detail(self):
+        # AllowAny - no auth required
+        res = self.client.get("/api/v1/doctors/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [d["id"] for d in res.data]
+        self.assertIn(self.doctor_profile.id, ids)
+        self.assertNotIn(self.inactive_doctor_profile.id, ids)
+
+        # Non-public doctor should be excluded
+        private_doc_user = User.objects.create_user(username="private_doc", password="Pass123!")
+        private_doc_user.groups.add(self.doctor_group)
+        private_doc = StaffProfile.objects.create(
+            user=private_doc_user,
+            employee_id="DOC_PRIV",
+            department=self.dept,
+            is_public=False,
+        )
+        res2 = self.client.get("/api/v1/doctors/")
+        ids2 = [d["id"] for d in res2.data]
+        self.assertNotIn(private_doc.id, ids2)
+
+        # Doctor detail
+        res_detail = self.client.get(f"/api/v1/doctors/{self.doctor_profile.id}/")
+        self.assertEqual(res_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_detail.data["full_name"], "Ramesh Gupta")
+        self.assertEqual(res_detail.data["department_name"], "General Medicine")
+
+        # Inactive or non-public doctor detail returns 404
+        res_inact = self.client.get(f"/api/v1/doctors/{self.inactive_doctor_profile.id}/")
+        self.assertEqual(res_inact.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_hospital_info_and_emergency_contacts(self):
+        res = self.client.get("/api/v1/hospital-info/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn("emergency_phone", res.data)
+        self.assertIn("ambulance_phone", res.data)
+        self.assertIn("address", res.data)
+        self.assertEqual(res.data["emergency_phone"], "102")
+
+    def test_hospital_departments_facilities_and_faqs(self):
+        from core.models import HospitalFacility, HospitalFaq
+
+        HospitalFacility.objects.create(
+            title="24x7 ICU & Critical Care",
+            category="Critical Care",
+            description="Equipped with advanced multi-para monitors and ventilators.",
+            highlight="24x7 Intensivist",
+            display_order=1,
+            is_active=True,
+        )
+        HospitalFacility.objects.create(
+            title="Draft Facility",
+            category="Draft",
+            description="Not yet active",
+            is_active=False,
+        )
+
+        HospitalFaq.objects.create(
+            question="What are the visiting hours?",
+            answer="Visiting hours are 4 PM to 7 PM daily.",
+            category="Visiting Hours",
+            highlight_tag="4 PM - 7 PM",
+            display_order=1,
+            is_active=True,
+        )
+        HospitalFaq.objects.create(
+            question="Internal draft question?",
+            answer="Secret internal answer",
+            category="Internal",
+            is_active=False,
+        )
+
+        # Departments
+        res_dept = self.client.get("/api/v1/departments/")
+        self.assertEqual(res_dept.status_code, status.HTTP_200_OK)
+        dept_codes = [d["code"] for d in res_dept.data]
+        self.assertIn("MED", dept_codes)
+        self.assertNotIn("INACT", dept_codes)
+
+        # Facilities
+        res_fac = self.client.get("/api/v1/facilities/")
+        self.assertEqual(res_fac.status_code, status.HTTP_200_OK)
+        titles = [f["title"] for f in res_fac.data]
+        self.assertIn("24x7 ICU & Critical Care", titles)
+        self.assertNotIn("Draft Facility", titles)
+
+        # FAQs
+        res_faq = self.client.get("/api/v1/faqs/")
+        self.assertEqual(res_faq.status_code, status.HTTP_200_OK)
+        questions = [q["question"] for q in res_faq.data]
+        self.assertIn("What are the visiting hours?", questions)
+        self.assertNotIn("Internal draft question?", questions)
+
+        # FAQ Search
+        res_search = self.client.get("/api/v1/faqs/?search=visiting")
+        self.assertEqual(res_search.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_search.data), 1)
+        self.assertEqual(res_search.data[0]["question"], "What are the visiting hours?")
+
