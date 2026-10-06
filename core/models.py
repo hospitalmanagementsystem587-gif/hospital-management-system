@@ -1315,3 +1315,81 @@ class PatientVerificationChallenge(TimestampedModel):
         indexes = [
             models.Index(fields=["contact", "purpose", "is_used"], name="chal_contact_purp_idx"),
         ]
+
+
+class PatientFeedback(TimestampedModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending Moderation"
+        PUBLISHED = "published", "Published"
+        REJECTED = "rejected", "Rejected"
+        WITHDRAWN = "withdrawn", "Withdrawn by Patient"
+
+    class Category(models.TextChoices):
+        DOCTOR_CONSULTATION = "doctor_consultation", "Doctor Consultation"
+        NURSING_CARE = "nursing_care", "Nursing & In-Patient"
+        EMERGENCY_CARE = "emergency_care", "Emergency Care"
+        PHARMACY_LAB = "pharmacy_lab", "Pharmacy & Lab"
+        OVERALL_EXPERIENCE = "overall_experience", "Overall Experience"
+
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="feedbacks",
+    )
+    appointment = models.OneToOneField(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name="patient_feedback",
+    )
+    doctor = models.ForeignKey(
+        StaffProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="doctor_feedbacks",
+    )
+    rating = models.PositiveSmallIntegerField()  # 1 to 5
+    category = models.CharField(
+        max_length=32,
+        choices=Category.choices,
+        default=Category.DOCTOR_CONSULTATION,
+    )
+    comment = models.TextField(blank=True, max_length=2000)
+    is_anonymous_public = models.BooleanField(
+        default=True,
+        help_text="If published, do not expose patient name publicly.",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    moderated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moderated_feedbacks",
+    )
+    moderated_at = models.DateTimeField(null=True, blank=True)
+    moderation_notes = models.TextField(blank=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "doctor"], name="feedback_status_doc_idx"),
+            models.Index(fields=["patient", "status"], name="feedback_patient_status_idx"),
+            models.Index(fields=["created_at"], name="feedback_created_idx"),
+        ]
+        permissions = [
+            ("can_moderate_feedback", "Can moderate patient feedback"),
+        ]
+
+    def __str__(self):
+        return f"Feedback #{self.pk} by {self.patient.full_name} ({self.rating}★ - {self.status})"
+
+    def clean(self):
+        super().clean()
+        if self.rating < 1 or self.rating > 5:
+            from django.core.exceptions import ValidationError
+            raise ValidationError({"rating": "Rating must be between 1 and 5."})

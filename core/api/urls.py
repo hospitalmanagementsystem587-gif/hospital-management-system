@@ -64,4 +64,12 @@ urlpatterns = [
     path("me/medication-schedules/", views.PatientMedicationScheduleListView.as_view(), name="patient_medication_schedule_list"),
     path("me/medication-schedules/<int:pk>/", views.PatientMedicationScheduleDetailView.as_view(), name="patient_medication_schedule_detail"),
     path("me/medication-schedules/log-dose/", views.PatientMedicationDoseLogCreateView.as_view(), name="patient_medication_dose_log"),
+    path("feedback/public/", views.PublicFeedbackListView.as_view(), name="public_feedback_list"),
+    path("me/feedback/eligibility/", views.PatientFeedbackEligibilityView.as_view(), name="patient_feedback_eligibility"),
+    path("me/feedback/", views.PatientFeedbackListCreateView.as_view(), name="patient_feedback_list_create"),
+    path("me/feedback/<int:pk>/", views.PatientFeedbackDetailView.as_view(), name="patient_feedback_detail"),
+    path("me/feedback/<int:pk>/withdraw/", views.PatientFeedbackWithdrawView.as_view(), name="patient_feedback_withdraw"),
+    path("staff/feedback/", views.StaffFeedbackModerationListView.as_view(), name="staff_feedback_list"),
+    path("staff/feedback/<int:pk>/action/", views.StaffFeedbackModerationActionView.as_view(), name="staff_feedback_action"),
 ]
+

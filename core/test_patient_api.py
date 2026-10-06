@@ -946,3 +946,162 @@ class PatientApiTests(TransactionTestCase):
         rx.status = Prescription.Status.CANCELLED
         rx.save(update_fields=["status"])
         self.assertEqual(self.client.get("/api/v1/me/medication-schedules/").data, [])
+
+    def test_patient_verified_feedback_and_moderation(self):
+        from core.models import PatientFeedback
+        from django.contrib.auth.models import Permission
+
+        # 1. Create a completed appointment for Patient 1
+        appt1 = Appointment.objects.create(
+            patient=self.patient1,
+            doctor=self.doctor_profile,
+            visit_type=self.visit_type,
+            scheduled_at=timezone.now() - timedelta(days=1),
+            status=Appointment.Status.COMPLETED,
+        )
+
+        # Non-completed appointment for Patient 1
+        appt_sched = Appointment.objects.create(
+            patient=self.patient1,
+            doctor=self.doctor_profile,
+            visit_type=self.visit_type,
+            scheduled_at=timezone.now() + timedelta(days=1),
+            status=Appointment.Status.SCHEDULED,
+        )
+
+        # Completed appointment for Patient 2
+        appt_p2 = Appointment.objects.create(
+            patient=self.patient2,
+            doctor=self.doctor_profile,
+            visit_type=self.visit_type,
+            scheduled_at=timezone.now() - timedelta(days=2),
+            status=Appointment.Status.COMPLETED,
+        )
+
+        # Check eligibility as Patient 1
+        self.client.force_authenticate(user=self.patient1_user)
+        res_elig = self.client.get("/api/v1/me/feedback/eligibility/")
+        self.assertEqual(res_elig.status_code, status.HTTP_200_OK)
+        elig_items = res_elig.data["eligible_appointments"]
+        self.assertEqual(len(elig_items), 1)
+        self.assertEqual(elig_items[0]["appointment_id"], appt1.id)
+        self.assertFalse(elig_items[0]["has_submitted"])
+
+        # Try to submit feedback on non-completed appointment (should fail 400)
+        res_sched = self.client.post("/api/v1/me/feedback/", {
+            "appointment_id": appt_sched.id,
+            "rating": 5,
+            "category": "doctor_consultation",
+            "comment": "Too early!",
+        })
+        self.assertEqual(res_sched.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Try to submit feedback on Patient 2's appointment (cross-patient isolation, should fail 403)
+        res_cross = self.client.post("/api/v1/me/feedback/", {
+            "appointment_id": appt_p2.id,
+            "rating": 5,
+            "category": "doctor_consultation",
+            "comment": "Hijack attempt",
+        })
+        self.assertEqual(res_cross.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Try script injection in comment (should fail 400 validation)
+        res_xss = self.client.post("/api/v1/me/feedback/", {
+            "appointment_id": appt1.id,
+            "rating": 5,
+            "category": "doctor_consultation",
+            "comment": "<script>alert('xss')</script>",
+        })
+        self.assertEqual(res_xss.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Legitimate submission
+        res_sub = self.client.post("/api/v1/me/feedback/", {
+            "appointment_id": appt1.id,
+            "rating": 5,
+            "category": "doctor_consultation",
+            "comment": "Dr. Gupta was attentive and prescribed effectively.",
+            "is_anonymous_public": True,
+        })
+        self.assertEqual(res_sub.status_code, status.HTTP_201_CREATED)
+        feedback_id = res_sub.data["id"]
+        self.assertEqual(res_sub.data["status"], "pending")
+        self.assertEqual(res_sub.data["doctor_name"], "Ramesh Gupta")
+
+        # Duplicate submission on same appointment (should fail 409)
+        res_dup = self.client.post("/api/v1/me/feedback/", {
+            "appointment_id": appt1.id,
+            "rating": 4,
+            "category": "doctor_consultation",
+            "comment": "Duplicate try",
+        })
+        self.assertEqual(res_dup.status_code, status.HTTP_409_CONFLICT)
+
+        # Patient's own list shows the feedback
+        res_my_list = self.client.get("/api/v1/me/feedback/")
+        self.assertEqual(res_my_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_my_list.data), 1)
+
+        # Public reviews list: NOT visible yet because it's pending moderation
+        res_public = self.client.get("/api/v1/feedback/public/")
+        self.assertEqual(res_public.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_public.data), 0)
+
+        # Doctor rating: Should be 0.0 because < 3 published reviews (minimum sample threshold)
+        res_doc = self.client.get(f"/api/v1/doctors/{self.doctor_profile.id}/")
+        self.assertEqual(res_doc.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_doc.data["rating"], 0.0)
+        self.assertEqual(res_doc.data["review_count"], 0)
+
+        # Staff moderation: Staff without can_moderate_feedback gets 403
+        self.client.force_authenticate(user=self.staff_user)
+        res_mod_denied = self.client.get("/api/v1/staff/feedback/")
+        self.assertEqual(res_mod_denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Give staff moderation permission
+        self.staff_user.is_staff = True
+        perm = Permission.objects.get(codename="can_moderate_feedback")
+        self.staff_user.user_permissions.add(perm)
+        self.staff_user.save()
+
+        # Staff queues
+        res_mod_queue = self.client.get("/api/v1/staff/feedback/")
+        self.assertEqual(res_mod_queue.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_mod_queue.data), 1)
+        self.assertEqual(res_mod_queue.data[0]["id"], feedback_id)
+
+        # Moderate and publish
+        res_mod_act = self.client.post(f"/api/v1/staff/feedback/{feedback_id}/action/", {
+            "action": "publish",
+            "reason": "Verified clinical encounter, no protected health information exposed.",
+        })
+        self.assertEqual(res_mod_act.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_mod_act.data["status"], "published")
+
+        # Now public feed includes it
+        self.client.force_authenticate(user=None)
+        res_pub_after = self.client.get("/api/v1/feedback/public/")
+        self.assertEqual(res_pub_after.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_pub_after.data), 1)
+        self.assertEqual(res_pub_after.data[0]["patient_display_name"], "Verified Patient")
+
+        # Edit/Withdrawal test as Patient 1
+        self.client.force_authenticate(user=self.patient1_user)
+        # Edit feedback rating
+        res_patch = self.client.patch(f"/api/v1/me/feedback/{feedback_id}/", {
+            "rating": 4,
+            "comment": "Updated comment after reflection.",
+        })
+        self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_patch.data["rating"], 4)
+        # Editing sets status back to pending
+        self.assertEqual(res_patch.data["status"], "pending")
+
+        # Withdraw feedback
+        res_with = self.client.post(f"/api/v1/me/feedback/{feedback_id}/withdraw/")
+        self.assertEqual(res_with.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_with.data["status"], "withdrawn")
+
+        # Once withdrawn, public list has 0
+        res_pub_with = self.client.get("/api/v1/feedback/public/")
+        self.assertEqual(len(res_pub_with.data), 0)
+

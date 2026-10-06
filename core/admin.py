@@ -17,6 +17,7 @@ from .models import (
     StaffProfile,
     Supplier,
     VisitType,
+    PatientFeedback,
 )
 
 User = get_user_model()
@@ -175,3 +176,28 @@ class HospitalFaqAdmin(admin.ModelAdmin):
     list_display = ("question", "category", "highlight_tag", "display_order", "is_active")
     list_filter = ("is_active", "category")
     search_fields = ("question", "answer", "category")
+
+
+@admin.register(PatientFeedback)
+class PatientFeedbackAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "patient",
+        "appointment",
+        "doctor",
+        "rating",
+        "category",
+        "status",
+        "is_anonymous_public",
+        "created_at",
+    )
+    list_filter = ("status", "rating", "category", "is_anonymous_public")
+    search_fields = (
+        "patient__full_name",
+        "patient__mrn",
+        "doctor__user__first_name",
+        "doctor__user__last_name",
+        "comment",
+        "moderation_notes",
+    )
+    readonly_fields = ("patient", "appointment", "doctor", "created_at", "updated_at")
