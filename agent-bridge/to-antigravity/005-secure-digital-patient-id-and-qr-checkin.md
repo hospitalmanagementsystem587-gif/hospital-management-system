@@ -3,6 +3,16 @@
 **Priority:** P1  
 **Depends on:** Tasks 002 and 003
 
+## Local Model Assignment
+
+Task 005 is assigned to the two local Ollama generation models under supervised execution. Antigravity owns Task 004 and must not work on Task 005 concurrently.
+
+- `qwen2.5-coder:7b` — implementation drafter. Inspect the existing Django appointment/check-in services and Android patient-ID flow, then propose narrowly scoped patches. Reuse existing models and transitions; do not invent a replacement appointment or queue system.
+- `deepseek-r1:7b` — adversarial reviewer. Review the proposed contract and every patch for token forgery, expiry, revocation, replay, enumeration, authorization, concurrency, privacy, logging, offline behavior, and false-success UI states.
+- Codex integration gate — apply only reviewed changes in isolated `task-005-secure-qr-checkin` worktrees, reconcile both model outputs, run migrations and complete test suites, and produce the completion report. Local-model output is advisory until verified.
+
+Neither model may push, merge, handle credentials, weaken tests, or edit outside Task 005 scope.
+
 ## Goal
 
 Implement a production-safe digital patient pass and reception QR check-in without exposing patient information or allowing forged/replayed check-ins.
