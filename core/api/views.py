@@ -1,4 +1,4 @@
-from django.db import transaction, IntegrityError
+from django.db import transaction, IntegrityError, OperationalError
 from django.utils import timezone
 from django.http import Http404
 from rest_framework import generics, status
@@ -112,7 +112,7 @@ class AppointmentListCreateView(APIView):
                     {"status": appointment.status, "source": "patient_api"},
                 )
 
-        except IntegrityError:
+        except (IntegrityError, OperationalError):
             return Response(
                 {
                     "error": {
@@ -192,3 +192,37 @@ class AppointmentCancelView(APIView):
 
         serializer = AppointmentDetailSerializer(appointment)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        refresh_token = request.data.get("refresh")
+        if not refresh_token:
+            return Response(
+                {"error": {"status_code": 400, "message": "Refresh token is required.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            from rest_framework_simplejwt.tokens import RefreshToken
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            return Response({"message": "Successfully logged out."}, status=status.HTTP_200_OK)
+        except Exception:
+            return Response(
+                {"error": {"status_code": 400, "message": "Invalid or expired token.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class LogoutAllView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+        tokens = OutstandingToken.objects.filter(user=request.user)
+        for token in tokens:
+            BlacklistedToken.objects.get_or_create(token=token)
+        return Response({"message": "Successfully logged out from all devices."}, status=status.HTTP_200_OK)
+

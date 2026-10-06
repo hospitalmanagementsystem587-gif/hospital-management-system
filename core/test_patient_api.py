@@ -1,8 +1,9 @@
 from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import TestCase
+from django.test import TransactionTestCase
 from django.utils import timezone
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -19,8 +20,9 @@ from core.models import (
 User = get_user_model()
 
 
-class PatientApiTests(TestCase):
+class PatientApiTests(TransactionTestCase):
     def setUp(self):
+        cache.clear()
         self.client = APIClient()
 
         # Doctor group
@@ -110,12 +112,9 @@ class PatientApiTests(TestCase):
         )
 
     def _auth(self, user):
-        response = self.client.post(
-            "/api/v1/auth/token/",
-            {"username": user.username, "password": "PatientPass123!" if "patient" in user.username else "StaffPass123!" if "reception" in user.username else "DoctorPass123!"},
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        token = response.data["access"]
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        token = str(refresh.access_token)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         return token
 
@@ -293,3 +292,115 @@ class PatientApiTests(TestCase):
 
         res = self.client.post(f"/api/v1/appointments/{appt.id}/cancel/")
         self.assertEqual(res.status_code, status.HTTP_409_CONFLICT)
+
+    def test_booking_inactive_doctor_is_rejected(self):
+        self._auth(self.patient1_user)
+        slot_time = timezone.now() + timedelta(days=6)
+        res = self.client.post(
+            "/api/v1/appointments/",
+            {
+                "doctor": self.inactive_doctor_profile.id,
+                "visit_type": self.visit_type.id,
+                "scheduled_at": slot_time.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_token_refresh_and_blacklisting_revocation(self):
+        # Obtain token
+        res = self.client.post(
+            "/api/v1/auth/token/",
+            {"username": self.patient1_user.username, "password": "PatientPass123!"},
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        access = res.data["access"]
+        refresh = res.data["refresh"]
+
+        # Refresh token works
+        res_ref = self.client.post("/api/v1/auth/token/refresh/", {"refresh": refresh})
+        self.assertEqual(res_ref.status_code, status.HTTP_200_OK)
+        new_refresh = res_ref.data.get("refresh")
+
+        # Because ROTATE_REFRESH_TOKENS and BLACKLIST_AFTER_ROTATION are True,
+        # old refresh token should now be blacklisted
+        res_old = self.client.post("/api/v1/auth/token/refresh/", {"refresh": refresh})
+        self.assertEqual(res_old.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # Logout with new_refresh
+        active_refresh = new_refresh or refresh
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res_ref.data['access']}")
+        res_logout = self.client.post("/api/v1/auth/logout/", {"refresh": active_refresh})
+        self.assertEqual(res_logout.status_code, status.HTTP_200_OK)
+
+        # Active refresh is now blacklisted
+        res_after_logout = self.client.post("/api/v1/auth/token/refresh/", {"refresh": active_refresh})
+        self.assertEqual(res_after_logout.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_all_devices(self):
+        res = self.client.post(
+            "/api/v1/auth/token/",
+            {"username": self.patient1_user.username, "password": "PatientPass123!"},
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        access = res.data["access"]
+        refresh = res.data["refresh"]
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        res_logout_all = self.client.post("/api/v1/auth/logout-all/")
+        self.assertEqual(res_logout_all.status_code, status.HTTP_200_OK)
+
+        # Attempt to refresh with refresh token -> should be rejected
+        res_refresh = self.client.post("/api/v1/auth/token/refresh/", {"refresh": refresh})
+        self.assertEqual(res_refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_concurrent_booking_slot_conflict_prevention(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        import threading
+        slot_time = timezone.now() + timedelta(days=7, hours=10)
+        results = []
+
+        def book(user):
+            from django.db import connection
+            client = APIClient()
+            token = str(RefreshToken.for_user(user).access_token)
+            client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+            res = client.post(
+                "/api/v1/appointments/",
+                {
+                    "doctor": self.doctor_profile.id,
+                    "visit_type": self.visit_type.id,
+                    "scheduled_at": slot_time.isoformat(),
+                },
+                format="json",
+            )
+            results.append(res.status_code)
+            connection.close()
+
+        t1 = threading.Thread(target=book, args=(self.patient1_user,))
+        t2 = threading.Thread(target=book, args=(self.patient2_user,))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        self.assertIn(status.HTTP_201_CREATED, results)
+        self.assertIn(status.HTTP_409_CONFLICT, results)
+        self.assertEqual(len(results), 2)
+
+    def test_auth_throttling_rejects_excessive_attempts(self):
+        from django.core.cache import cache
+        cache.clear()
+        for _ in range(10):
+            self.client.post(
+                "/api/v1/auth/token/",
+                {"username": "nonexistent", "password": "wrong"},
+            )
+        # The 11th attempt within 1 minute should be throttled (10/min)
+        res = self.client.post(
+            "/api/v1/auth/token/",
+            {"username": "nonexistent", "password": "wrong"},
+        )
+        self.assertEqual(res.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+

@@ -19,6 +19,8 @@ urlpatterns = [
     # Auth endpoints
     path("auth/token/", ThrottledTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("auth/token/refresh/", ThrottledTokenRefreshView.as_view(), name="token_refresh"),
+    path("auth/logout/", views.LogoutView.as_view(), name="auth_logout"),
+    path("auth/logout-all/", views.LogoutAllView.as_view(), name="auth_logout_all"),
 
     # Patient profile
     path("me/", views.PatientProfileView.as_view(), name="patient_profile"),

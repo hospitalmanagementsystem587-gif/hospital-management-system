@@ -128,7 +128,11 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
 
 class AppointmentBookingSerializer(serializers.Serializer):
     doctor = serializers.PrimaryKeyRelatedField(
-        queryset=StaffProfile.objects.filter(user__groups__name="Doctor")
+        queryset=StaffProfile.objects.filter(
+            user__groups__name="Doctor",
+            user__is_active=True,
+            department__is_active=True,
+        )
     )
     visit_type = serializers.PrimaryKeyRelatedField(
         queryset=VisitType.objects.filter(is_active=True)
@@ -136,6 +140,8 @@ class AppointmentBookingSerializer(serializers.Serializer):
     scheduled_at = serializers.DateTimeField()
 
     def validate_doctor(self, value):
+        if not value.user.is_active:
+            raise serializers.ValidationError("Doctor is inactive.")
         if not value.department or not value.department.is_active:
             raise serializers.ValidationError("Doctor is not associated with an active department.")
         return value
