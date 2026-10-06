@@ -3,6 +3,10 @@
 **Priority:** P2  
 **Depends on:** Tasks 002 and 003
 
+## Assignment
+
+Assigned to Antigravity third in the queue, after Task 008. Start from the latest merged `main` in isolated HMS and Android worktrees on `task-009-verified-feedback`. Push PRs for review; do not merge. Do not fabricate ratings, reviews, or verification state.
+
 ## Goal
 
 Replace static reviews and calculated satisfaction graphics with verified, moderated feedback tied to real completed care events.

@@ -3,6 +3,10 @@
 **Priority:** P1  
 **Depends on:** Task 006
 
+## Assignment
+
+Assigned to Antigravity second in the queue, after Task 007. Start from the latest merged `main` in isolated HMS and Android worktrees on `task-008-medication-reminders`. Push PRs for review; do not merge. Preserve Task 006 prescription authority and never derive authoritative schedules from unstructured text.
+
 ## Goal
 
 Turn issued prescriptions into clinically reviewed medication schedules that can drive reliable Android reminders and optional patient-reported adherence without changing the prescription itself.
