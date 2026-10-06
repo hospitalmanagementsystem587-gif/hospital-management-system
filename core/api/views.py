@@ -479,6 +479,91 @@ class HealthPackageListView(generics.ListAPIView):
         )
 
 
+class OpdHistoricalMetricsView(APIView):
+    permission_classes = [AllowAny]
+    minimum_bucket_size = 5
+
+    def get(self, request):
+        from collections import defaultdict
+        from datetime import timedelta
+        from django.utils import timezone
+
+        try:
+            weekday = int(request.query_params.get("weekday", timezone.localdate().weekday()))
+        except ValueError:
+            return Response({"detail": "weekday must be an integer from 0 to 6."}, status=400)
+        if weekday not in range(7):
+            return Response({"detail": "weekday must be an integer from 0 to 6."}, status=400)
+
+        end_date = timezone.localdate()
+        start_date = end_date - timedelta(days=28)
+        queryset = Appointment.objects.filter(
+            scheduled_at__date__gte=start_date,
+            scheduled_at__date__lt=end_date,
+        ).select_related("doctor__department")
+        department = request.query_params.get("department", "").strip()
+        if department:
+            queryset = queryset.filter(doctor__department__code__iexact=department)
+
+        buckets = defaultdict(lambda: {
+            "booked": 0, "check_ins": 0, "completed": 0, "no_shows": 0,
+            "wait_minutes": [], "duration_minutes": [],
+        })
+        complete_waits = 0
+        for appointment in queryset.iterator():
+            local_scheduled = timezone.localtime(appointment.scheduled_at)
+            if local_scheduled.weekday() != weekday:
+                continue
+            bucket = buckets[local_scheduled.hour]
+            bucket["booked"] += 1
+            if appointment.checked_in_at:
+                bucket["check_ins"] += 1
+            if appointment.status == Appointment.Status.COMPLETED:
+                bucket["completed"] += 1
+            if appointment.status == Appointment.Status.NO_SHOW:
+                bucket["no_shows"] += 1
+            if appointment.checked_in_at and appointment.started_at and appointment.started_at >= appointment.checked_in_at:
+                bucket["wait_minutes"].append((appointment.started_at - appointment.checked_in_at).total_seconds() / 60)
+                complete_waits += 1
+            if appointment.started_at and appointment.completed_at and appointment.completed_at >= appointment.started_at:
+                bucket["duration_minutes"].append((appointment.completed_at - appointment.started_at).total_seconds() / 60)
+
+        hourly = []
+        total_records = sum(bucket["booked"] for bucket in buckets.values())
+        for hour, bucket in sorted(buckets.items()):
+            if bucket["booked"] < self.minimum_bucket_size:
+                continue
+            waits = bucket.pop("wait_minutes")
+            durations = bucket.pop("duration_minutes")
+            hourly.append({
+                "hour": hour,
+                **bucket,
+                "sample_size": bucket["booked"],
+                "average_wait_minutes": round(sum(waits) / len(waits)) if waits else None,
+                "average_consultation_minutes": round(sum(durations) / len(durations)) if durations else None,
+            })
+
+        return Response({
+            "kind": "historical",
+            "generated_at": timezone.now(),
+            "date_range": {"start": start_date, "end_exclusive": end_date},
+            "weekday": weekday,
+            "department": department or None,
+            "minimum_bucket_size": self.minimum_bucket_size,
+            "data_quality": {
+                "records": total_records,
+                "complete_wait_samples": complete_waits,
+                "forecast_available": False,
+                "message": "Forecasting is disabled until sufficient lifecycle data is back-tested and approved.",
+            },
+            "definitions": {
+                "booked": "Appointments scheduled in the hour, including later no-shows or cancellations.",
+                "average_wait_minutes": "Mean elapsed time from recorded check-in to consultation start.",
+            },
+            "hourly": hourly,
+        })
+
+
 class VisitTypeListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = VisitTypeSerializer

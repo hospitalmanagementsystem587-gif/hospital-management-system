@@ -176,6 +176,38 @@ class PatientApiTests(TransactionTestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         return token
 
+    def test_public_opd_metrics_are_historical_aggregate_and_department_filtered(self):
+        local_now = timezone.localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0)
+        scheduled = local_now - timedelta(days=7)
+        for index in range(5):
+            checked_in = scheduled + timedelta(minutes=index)
+            Appointment.objects.create(
+                patient=self.patient1, doctor=self.doctor_profile, visit_type=self.visit_type,
+                scheduled_at=scheduled + timedelta(minutes=index),
+                status=Appointment.Status.COMPLETED,
+                checked_in_at=checked_in,
+                started_at=checked_in + timedelta(minutes=10 + index),
+                completed_at=checked_in + timedelta(minutes=30 + index),
+            )
+
+        response = self.client.get(
+            "/api/v1/opd/historical-metrics/",
+            {"weekday": scheduled.weekday(), "department": self.dept.code},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["kind"], "historical")
+        self.assertFalse(response.json()["data_quality"]["forecast_available"])
+        self.assertEqual(response.json()["hourly"][0]["sample_size"], 5)
+        self.assertEqual(response.json()["hourly"][0]["average_wait_minutes"], 12)
+        self.assertNotIn("patient", str(response.json()).lower())
+
+        filtered = self.client.get(
+            "/api/v1/opd/historical-metrics/",
+            {"weekday": scheduled.weekday(), "department": "NOT-A-DEPARTMENT"},
+        )
+        self.assertEqual(filtered.json()["hourly"], [])
+
 
     def test_unauthenticated_requests_are_rejected(self):
         res = self.client.get("/api/v1/me/")
