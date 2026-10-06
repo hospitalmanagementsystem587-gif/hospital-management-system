@@ -61,4 +61,7 @@ urlpatterns = [
     path("me/receipts/<str:receipt_number>/", views.PatientReceiptDetailView.as_view(), name="patient_receipt_detail"),
     path("me/digital-pass/", views.DigitalCheckInPassIssueView.as_view(), name="digital_check_in_pass_issue"),
     path("reception/qr-check-in/", views.DigitalCheckInConsumeView.as_view(), name="digital_check_in_consume"),
+    path("me/medication-schedules/", views.PatientMedicationScheduleListView.as_view(), name="patient_medication_schedule_list"),
+    path("me/medication-schedules/<int:pk>/", views.PatientMedicationScheduleDetailView.as_view(), name="patient_medication_schedule_detail"),
+    path("me/medication-schedules/log-dose/", views.PatientMedicationDoseLogCreateView.as_view(), name="patient_medication_dose_log"),
 ]

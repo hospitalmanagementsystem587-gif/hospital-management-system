@@ -917,3 +917,32 @@ class PatientApiTests(TransactionTestCase):
         res_pay = self.client.post(f"/api/v1/me/invoices/{inv1.pk}/pay/")
         self.assertEqual(res_pay.status_code, status.HTTP_501_NOT_IMPLEMENTED)
         self.assertFalse(res_pay.data["enabled"])
+
+    def test_patient_medication_schedules_and_adherence(self):
+        import uuid
+        from datetime import date, timedelta
+        from core.models import MedicationSchedule, Medicine, Prescription, PrescriptionItem
+
+        med = Medicine.objects.create(generic_name="Paracetamol", brand_name="Crocin 500", strength="500mg", dosage_form="Tablet", unit="strip")
+        rx = Prescription.objects.create(number="RX-2026-MEDS", patient=self.patient1, doctor=self.doctor_profile, status=Prescription.Status.ISSUED, issued_at=timezone.now())
+        item = PrescriptionItem.objects.create(prescription=rx, medicine=med, dosage="1 tablet", frequency="twice daily", duration="10 days", instructions="After meals", quantity=20)
+        schedule = MedicationSchedule.objects.create(prescription_item=item, patient=self.patient1, dose_amount="1 tablet", dose_unit="tablet", target_times=["08:00", "20:00"], meal_relation=MedicationSchedule.MealRelation.AFTER_MEAL, start_date=date.today(), end_date=date.today() + timedelta(days=10), timezone="Asia/Kolkata", is_active=True, confirmed_by=self.doctor_profile)
+        inactive = MedicationSchedule.objects.create(prescription_item=item, patient=self.patient1, dose_amount="1 tablet", dose_unit="tablet", target_times=["14:00"], meal_relation=MedicationSchedule.MealRelation.BEFORE_MEAL, start_date=date.today(), end_date=date.today() + timedelta(days=5), timezone="Asia/Kolkata", is_active=False, confirmed_by=self.doctor_profile)
+
+        self._auth(self.patient1_user)
+        response = self.client.get("/api/v1/me/medication-schedules/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(schedule.id, [entry["id"] for entry in response.data])
+        self.assertNotIn(inactive.id, [entry["id"] for entry in response.data])
+
+        self._auth(self.patient2_user)
+        self.assertEqual(self.client.get(f"/api/v1/me/medication-schedules/{schedule.id}/").status_code, status.HTTP_404_NOT_FOUND)
+
+        self._auth(self.patient1_user)
+        payload = {"schedule": schedule.id, "scheduled_time": "2026-10-07T08:00:00Z", "action": "taken", "logged_at": "2026-10-07T08:05:00Z", "idempotency_key": str(uuid.uuid4())}
+        self.assertEqual(self.client.post("/api/v1/me/medication-schedules/log-dose/", payload, format="json").status_code, status.HTTP_201_CREATED)
+        self.assertEqual(self.client.post("/api/v1/me/medication-schedules/log-dose/", payload, format="json").status_code, status.HTTP_200_OK)
+
+        rx.status = Prescription.Status.CANCELLED
+        rx.save(update_fields=["status"])
+        self.assertEqual(self.client.get("/api/v1/me/medication-schedules/").data, [])

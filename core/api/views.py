@@ -32,6 +32,8 @@ from core.models import (
     Payment,
     Prescription,
     Refund,
+    MedicationSchedule,
+    MedicationDoseLog,
     StaffProfile,
     VisitType,
 )
@@ -71,6 +73,8 @@ from core.api.serializers import (
     PatientInvoiceListSerializer,
     PatientInvoiceDetailSerializer,
     PatientReceiptSerializer,
+    PatientMedicationScheduleSerializer,
+    MedicationDoseLogSerializer,
 )
 from core.services.documents import (
     open_validated_patient_document,
@@ -1055,3 +1059,46 @@ class DigitalCheckInConsumeView(APIView):
                 details={"source": "qr"},
             )
         return Response({"appointment_id": appointment.pk, "status": "checked_in", "replayed": False})
+
+
+class PatientMedicationScheduleListView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request):
+        patient = request.user.patient_account.patient
+        schedules = MedicationSchedule.objects.filter(patient=patient, is_active=True, prescription_item__prescription__status=Prescription.Status.ISSUED).select_related("prescription_item__medicine", "prescription_item__prescription__doctor", "confirmed_by").order_by("-start_date", "-id")
+        return _clinical_response(PatientMedicationScheduleSerializer(schedules, many=True).data)
+
+
+class PatientMedicationScheduleDetailView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def get(self, request, pk):
+        patient = request.user.patient_account.patient
+        try:
+            schedule = MedicationSchedule.objects.filter(patient=patient, prescription_item__prescription__status=Prescription.Status.ISSUED).select_related("prescription_item__medicine", "prescription_item__prescription__doctor", "confirmed_by").get(pk=pk)
+        except MedicationSchedule.DoesNotExist:
+            raise Http404("Medication schedule not found")
+        return _clinical_response(PatientMedicationScheduleSerializer(schedule).data)
+
+
+class PatientMedicationDoseLogCreateView(APIView):
+    permission_classes = [IsPatientUser]
+
+    def post(self, request):
+        patient = request.user.patient_account.patient
+        raw_key = request.data.get("idempotency_key")
+        if raw_key:
+            existing = MedicationDoseLog.objects.filter(idempotency_key=raw_key, schedule__patient=patient).first()
+            if existing:
+                return Response(MedicationDoseLogSerializer(existing).data)
+        serializer = MedicationDoseLogSerializer(data=request.data)
+        if not serializer.is_valid():
+            existing_slot = MedicationDoseLog.objects.filter(schedule_id=request.data.get("schedule"), schedule__patient=patient, scheduled_time=request.data.get("scheduled_time")).first()
+            if existing_slot:
+                return Response(MedicationDoseLogSerializer(existing_slot).data)
+            serializer.is_valid(raise_exception=True)
+        if serializer.validated_data["schedule"].patient_id != patient.id:
+            raise Http404("Medication schedule not found")
+        dose_log = serializer.save()
+        return Response(MedicationDoseLogSerializer(dose_log).data, status=status.HTTP_201_CREATED)

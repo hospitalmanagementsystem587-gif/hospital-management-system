@@ -15,6 +15,8 @@ from core.models import (
     Invoice,
     InvoiceLine,
     Medicine,
+    MedicationSchedule,
+    MedicationDoseLog,
     Patient,
     PatientDocument,
     Payment,
@@ -597,3 +599,32 @@ class PatientReceiptSerializer(serializers.ModelSerializer):
             "received_at",
         ]
 
+
+class PatientMedicationScheduleSerializer(serializers.ModelSerializer):
+    medicine_name = serializers.SerializerMethodField()
+    medicine_generic_name = serializers.CharField(source="prescription_item.medicine.generic_name", read_only=True)
+    prescription_number = serializers.CharField(source="prescription_item.prescription.number", read_only=True)
+    prescribing_doctor_name = serializers.SerializerMethodField()
+    confirmed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MedicationSchedule
+        fields = ["id", "prescription_item", "prescription_number", "medicine_name", "medicine_generic_name", "prescribing_doctor_name", "dose_amount", "dose_unit", "target_times", "meal_relation", "start_date", "end_date", "timezone", "is_active", "confirmed_by_name", "confirmed_at", "version"]
+
+    def get_medicine_name(self, obj):
+        medicine = obj.prescription_item.medicine
+        return medicine.brand_name or medicine.generic_name
+
+    def get_prescribing_doctor_name(self, obj):
+        user = obj.prescription_item.prescription.doctor.user
+        return user.get_full_name() or user.username
+
+    def get_confirmed_by_name(self, obj):
+        return obj.confirmed_by.user.get_full_name() or obj.confirmed_by.user.username
+
+
+class MedicationDoseLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MedicationDoseLog
+        fields = ["id", "schedule", "scheduled_time", "action", "logged_at", "idempotency_key"]
+        read_only_fields = ["id"]
