@@ -153,6 +153,34 @@ class Service(TimestampedModel):
         ]
 
 
+class HealthPackage(TimestampedModel):
+    """A governed, publishable bundle of services with a price snapshot."""
+
+    code = models.CharField(max_length=32, unique=True)
+    name = models.CharField(max_length=160)
+    description = models.TextField(blank=True)
+    included_services = models.ManyToManyField(Service, related_name="health_packages")
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    eligibility = models.TextField(blank=True)
+    fasting_instructions = models.TextField(blank=True)
+    valid_from = models.DateField()
+    valid_until = models.DateField(null=True, blank=True)
+    is_published = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("name", "id")
+        constraints = [
+            models.CheckConstraint(condition=Q(price__gte=0), name="health_package_price_nonnegative"),
+            models.CheckConstraint(
+                condition=Q(valid_until__isnull=True) | Q(valid_until__gte=models.F("valid_from")),
+                name="health_package_valid_dates",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class PaymentMethod(TimestampedModel):
     code = models.CharField(max_length=32, unique=True)
     name = models.CharField(max_length=80, unique=True)

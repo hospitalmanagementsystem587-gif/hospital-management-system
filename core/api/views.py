@@ -16,6 +16,9 @@ from core.models import (
     Department,
     HospitalFacility,
     HospitalFaq,
+    HealthPackage,
+    Ward,
+    Bed,
     HospitalSettings,
     PatientDocument,
     Prescription,
@@ -44,6 +47,7 @@ from core.api.serializers import (
     HospitalInfoSerializer,
     HospitalFacilitySerializer,
     HospitalFaqSerializer,
+    HealthPackageSerializer,
     VisitTypeSerializer,
     AppointmentListSerializer,
     AppointmentDetailSerializer,
@@ -414,6 +418,65 @@ class HospitalFaqListView(generics.ListAPIView):
             from django.db.models import Q
             qs = qs.filter(Q(question__icontains=search) | Q(answer__icontains=search))
         return qs
+
+
+class BedAvailabilityView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from django.db.models import Count, Q
+        from django.utils import timezone
+
+        generated_at = timezone.now()
+        wards = (
+            Ward.objects.filter(is_active=True)
+            .values("category")
+            .annotate(
+                total=Count("beds"),
+                available=Count("beds", filter=Q(beds__status=Bed.Status.AVAILABLE)),
+                occupied=Count("beds", filter=Q(beds__status=Bed.Status.OCCUPIED)),
+                maintenance=Count("beds", filter=Q(beds__status=Bed.Status.MAINTENANCE)),
+            )
+            .order_by("category")
+        )
+        labels = dict(Ward.Category.choices)
+        categories = [
+            {
+                "category": row["category"],
+                "label": labels[row["category"]],
+                "total": row["total"],
+                "available": row["available"],
+                "occupied": row["occupied"],
+                "maintenance": row["maintenance"],
+            }
+            for row in wards
+            if row["total"] > 0
+        ]
+        response = Response({
+            "generated_at": generated_at,
+            "fresh_for_seconds": 60,
+            "disclaimer": "Availability is indicative and subject to confirmation during admission.",
+            "categories": categories,
+        })
+        response["Cache-Control"] = "public, max-age=30, stale-if-error=300"
+        return response
+
+
+class HealthPackageListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = HealthPackageSerializer
+
+    def get_queryset(self):
+        from django.db.models import Q
+        from django.utils import timezone
+
+        today = timezone.localdate()
+        return (
+            HealthPackage.objects.filter(is_published=True, valid_from__lte=today)
+            .filter(Q(valid_until__isnull=True) | Q(valid_until__gte=today))
+            .prefetch_related("included_services")
+            .order_by("name", "id")
+        )
 
 
 class VisitTypeListView(generics.ListAPIView):

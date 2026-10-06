@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import date, timedelta
+from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TransactionTestCase
@@ -15,9 +16,62 @@ from core.models import (
     VisitType,
     Appointment,
     AuditEvent,
+    Bed,
+    HealthPackage,
+    Service,
+    Ward,
 )
 
 User = get_user_model()
+
+
+class PublicCapacityAndPackageApiTests(TransactionTestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.ward = Ward.objects.create(code="ICU-A", name="ICU A", category=Ward.Category.ICU)
+        Bed.objects.create(ward=self.ward, bed_number="1", status=Bed.Status.AVAILABLE)
+        Bed.objects.create(ward=self.ward, bed_number="2", status=Bed.Status.OCCUPIED, notes="private")
+        Bed.objects.create(ward=self.ward, bed_number="3", status=Bed.Status.MAINTENANCE)
+
+    def test_bed_availability_is_aggregate_and_privacy_safe(self):
+        response = self.client.get("/api/v1/bed-availability/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json()["categories"],
+            [{
+                "category": "icu", "label": "Intensive Care Unit (ICU)",
+                "total": 3, "available": 1, "occupied": 1, "maintenance": 1,
+            }],
+        )
+        payload = str(response.json()).lower()
+        self.assertNotIn("bed_number", payload)
+        self.assertNotIn("notes", payload)
+        self.assertNotIn("patient", payload)
+        self.assertIn("max-age=30", response["Cache-Control"])
+
+    def test_only_current_published_packages_are_returned(self):
+        service = Service.objects.create(code="CBC", name="Complete blood count", current_charge=500)
+        visible = HealthPackage.objects.create(
+            code="WELLNESS", name="Approved wellness", price=Decimal("999.00"),
+            valid_from=date.today(), is_published=True,
+        )
+        visible.included_services.add(service)
+        HealthPackage.objects.create(
+            code="DRAFT", name="Draft package", price=Decimal("100.00"),
+            valid_from=date.today(), is_published=False,
+        )
+        HealthPackage.objects.create(
+            code="EXPIRED", name="Expired package", price=Decimal("100.00"),
+            valid_from=date(2020, 1, 1), valid_until=date(2020, 1, 2), is_published=True,
+        )
+
+        response = self.client.get("/api/v1/health-packages/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["code"] for item in response.json()], ["WELLNESS"])
+        self.assertEqual(response.json()[0]["price"], "999.00")
+        self.assertEqual(response.json()[0]["included_services"], ["Complete blood count"])
 
 
 class PatientApiTests(TransactionTestCase):
@@ -679,4 +733,3 @@ class PatientApiTests(TransactionTestCase):
         self.assertEqual(res_search.status_code, status.HTTP_200_OK)
         self.assertEqual(len(res_search.data), 1)
         self.assertEqual(res_search.data[0]["question"], "What are the visiting hours?")
-

@@ -8,6 +8,7 @@ from core.models import (
     Department,
     HospitalFacility,
     HospitalFaq,
+    HealthPackage,
     HospitalSettings,
     Medicine,
     Patient,
@@ -179,6 +180,17 @@ class HospitalFaqSerializer(serializers.ModelSerializer):
             "category",
             "highlight_tag",
             "display_order",
+        ]
+
+
+class HealthPackageSerializer(serializers.ModelSerializer):
+    included_services = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+
+    class Meta:
+        model = HealthPackage
+        fields = [
+            "id", "code", "name", "description", "included_services", "price",
+            "eligibility", "fasting_instructions", "valid_from", "valid_until",
         ]
 
 

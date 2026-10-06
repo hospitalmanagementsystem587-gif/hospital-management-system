@@ -6,6 +6,7 @@ from .models import (
     Department,
     HospitalFacility,
     HospitalFaq,
+    HealthPackage,
     HospitalSettings,
     Medicine,
     NumberSequence,
@@ -112,6 +113,14 @@ class ServiceAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "current_charge", "is_active")
     list_filter = ("is_active",)
     search_fields = ("code", "name")
+
+
+@admin.register(HealthPackage)
+class HealthPackageAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "price", "valid_from", "valid_until", "is_published")
+    list_filter = ("is_published", "valid_from", "valid_until")
+    search_fields = ("code", "name", "description")
+    filter_horizontal = ("included_services",)
 
 
 @admin.register(PaymentMethod)
