@@ -385,6 +385,22 @@ class Appointment(TimestampedModel):
         ]
 
 
+class DigitalCheckInPass(TimestampedModel):
+    appointment = models.ForeignKey(
+        Appointment, on_delete=models.CASCADE, related_name="digital_check_in_passes"
+    )
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="digital_check_in_passes"
+    )
+    token_digest = models.CharField(max_length=64, unique=True, editable=False)
+    expires_at = models.DateTimeField(db_index=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["patient", "expires_at"], name="qr_patient_expiry_idx")]
+
+
 class Consultation(TimestampedModel):
     appointment = models.OneToOneField(
         Appointment,

@@ -23,3 +23,16 @@ class IsPatientUser(permissions.BasePermission):
 
         account = request.user.patient_account
         return account.is_verified and account.patient.archived_at is None
+
+
+class IsReceptionUser(permissions.BasePermission):
+    message = "Reception staff account required."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.is_active
+            and request.user.groups.filter(name="Reception").exists()
+            and StaffProfile.objects.filter(user=request.user).exists()
+        )

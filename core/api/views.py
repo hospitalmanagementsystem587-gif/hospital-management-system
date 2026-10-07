@@ -1,4 +1,7 @@
 from django.conf import settings
+import hashlib
+import secrets
+from datetime import timedelta
 from django.db import transaction, IntegrityError, OperationalError
 from django.db.models import Count, Prefetch
 from django.utils import timezone
@@ -15,6 +18,7 @@ from core.models import (
     AuditEvent,
     Consultation,
     Department,
+    DigitalCheckInPass,
     HospitalFacility,
     HospitalFaq,
     HealthPackage,
@@ -33,7 +37,7 @@ from core.models import (
 )
 from core.forms import appointment_slot_conflicts
 from core.views import _audit_appointment_change
-from core.api.permissions import IsPatientUser
+from core.api.permissions import IsPatientUser, IsReceptionUser
 from core.api.throttling import AppointmentWriteRateThrottle
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -984,3 +988,72 @@ class PatientPaymentInitiateView(APIView):
             status=status.HTTP_501_NOT_IMPLEMENTED,
         )
 
+class DigitalCheckInPassIssueView(PatientClinicalAPIView):
+    permission_classes = [IsPatientUser]
+
+    def post(self, request):
+        patient = request.user.patient_account.patient
+        candidates = Appointment.objects.filter(
+            patient=patient,
+            status=Appointment.Status.SCHEDULED,
+            scheduled_at__date=timezone.localdate(),
+        )
+        appointment_id = request.data.get("appointment_id")
+        if appointment_id:
+            candidates = candidates.filter(pk=appointment_id)
+        if candidates.count() != 1:
+            return Response({"detail": "Select one eligible appointment."}, status=409)
+        appointment = candidates.get()
+        raw_token = secrets.token_urlsafe(32)
+        digest = hashlib.sha256(raw_token.encode()).hexdigest()
+        expires_at = timezone.now() + timedelta(minutes=5)
+        with transaction.atomic():
+            DigitalCheckInPass.objects.filter(
+                patient=patient, consumed_at__isnull=True, revoked_at__isnull=True
+            ).update(revoked_at=timezone.now())
+            DigitalCheckInPass.objects.create(
+                appointment=appointment, patient=patient,
+                token_digest=digest, expires_at=expires_at,
+            )
+        return _clinical_response({
+            "token": raw_token,
+            "expires_at": expires_at,
+            "appointment_id": appointment.pk,
+        })
+
+
+class DigitalCheckInConsumeView(APIView):
+    permission_classes = [IsReceptionUser]
+
+    def post(self, request):
+        raw_token = request.data.get("token", "")
+        digest = hashlib.sha256(raw_token.encode()).hexdigest()
+        with transaction.atomic():
+            try:
+                qr_pass = DigitalCheckInPass.objects.select_for_update().select_related("appointment").get(
+                    token_digest=digest
+                )
+            except DigitalCheckInPass.DoesNotExist:
+                raise Http404("Pass not found")
+            appointment = Appointment.objects.select_for_update().get(pk=qr_pass.appointment_id)
+            if qr_pass.revoked_at or qr_pass.expires_at <= timezone.now():
+                raise Http404("Pass not found")
+            if qr_pass.consumed_at:
+                if appointment.status == Appointment.Status.CHECKED_IN:
+                    return Response({"appointment_id": appointment.pk, "status": "checked_in", "replayed": True})
+                raise Http404("Pass not found")
+            if appointment.status != Appointment.Status.SCHEDULED:
+                return Response({"detail": "Appointment is not eligible for check-in."}, status=409)
+            now = timezone.now()
+            appointment.status = Appointment.Status.CHECKED_IN
+            appointment.checked_in_at = now
+            appointment.save(update_fields=["status", "checked_in_at", "updated_at"])
+            qr_pass.consumed_at = now
+            qr_pass.save(update_fields=["consumed_at", "updated_at"])
+            actor = StaffProfile.objects.get(user=request.user)
+            AuditEvent.objects.create(
+                actor=actor, action="appointment.qr_checked_in",
+                target_type="appointment", target_id=str(appointment.pk),
+                details={"source": "qr"},
+            )
+        return Response({"appointment_id": appointment.pk, "status": "checked_in", "replayed": False})
