@@ -107,6 +107,11 @@ locks the pair for 10 minutes). Configure and verify edge-level rate limiting
 under KAN-16 before real patient data is handled.
 See [docs/security.md](docs/security.md).
 
+The admin, staff, store, patient, and agent host boundaries are documented in
+[docs/portal-architecture.md](docs/portal-architecture.md). They all use this
+same Django backend, database, and authorization system; `/api/v1/` remains the
+host-neutral Android API.
+
 After creating the initial administrator, run `python manage.py bootstrap_hospital`
 to create the singleton hospital settings placeholder, four curated role groups,
 and document-number sequences. Replace the placeholder hospital name and review

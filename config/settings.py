@@ -29,6 +29,18 @@ ALLOWED_HOSTS = [
 if "testserver" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("testserver")
 
+# KAN-35: every portal is a host-based view over this Django application and
+# its single configured database. Production must set each host explicitly.
+PORTAL_HOSTS = {
+    "admin": os.getenv("HMS_ADMIN_HOST", "admin.localhost"),
+    "staff": os.getenv("HMS_STAFF_HOST", "staff.localhost"),
+    "store": os.getenv("HMS_STORE_HOST", "store.localhost"),
+    "patient": os.getenv("HMS_PATIENT_HOST", "patient.localhost"),
+    "agent": os.getenv("HMS_AGENT_HOST", "agent.localhost"),
+}
+if DEBUG and ".localhost" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(".localhost")
+
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
@@ -60,6 +72,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.portal.middleware.PortalRoutingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
