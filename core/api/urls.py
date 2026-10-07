@@ -53,4 +53,10 @@ urlpatterns = [
     path("me/prescriptions/<int:pk>/", views.PrescriptionDetailView.as_view(), name="patient_prescription_detail"),
     path("me/documents/", views.PatientDocumentListView.as_view(), name="patient_document_list"),
     path("me/documents/<uuid:public_id>/download/", views.PatientDocumentDownloadView.as_view(), name="patient_document_download"),
+
+    # Patient-owned billing and receipts (read-only)
+    path("me/invoices/", views.PatientInvoiceListView.as_view(), name="patient_invoice_list"),
+    path("me/invoices/<int:pk>/", views.PatientInvoiceDetailView.as_view(), name="patient_invoice_detail"),
+    path("me/invoices/<int:pk>/pay/", views.PatientPaymentInitiateView.as_view(), name="patient_payment_initiate"),
+    path("me/receipts/<str:receipt_number>/", views.PatientReceiptDetailView.as_view(), name="patient_receipt_detail"),
 ]
