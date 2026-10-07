@@ -222,6 +222,56 @@ class PaymentMethod(TimestampedModel):
     is_active = models.BooleanField(default=True)
 
 
+class InsuranceProvider(TimestampedModel):
+    name = models.CharField(max_length=180)
+    code = models.CharField(max_length=40, unique=True)
+    provider_type = models.CharField(max_length=16, choices=(("insurer", "Insurer"), ("tpa", "TPA")))
+    is_active = models.BooleanField(default=True)
+
+
+class InsurancePolicy(TimestampedModel):
+    class Status(models.TextChoices):
+        UNVERIFIED = "unverified", "Unverified"
+        VERIFIED = "verified", "Verified"
+        REVOKED = "revoked", "Revoked"
+        EXPIRED = "expired", "Expired"
+
+    patient = models.ForeignKey("Patient", on_delete=models.PROTECT, related_name="insurance_policies")
+    provider = models.ForeignKey(InsuranceProvider, on_delete=models.PROTECT, related_name="policies")
+    member_reference = models.CharField(max_length=160)
+    policy_reference = models.CharField(max_length=160)
+    effective_from = models.DateField()
+    effective_until = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.UNVERIFIED)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=Q(effective_until__isnull=True) | Q(effective_until__gte=F("effective_from")), name="insurance_policy_valid_dates")]
+
+
+class InsuranceVerification(TimestampedModel):
+    policy = models.ForeignKey(InsurancePolicy, on_delete=models.PROTECT, related_name="verifications")
+    result = models.CharField(max_length=16, choices=(("pending", "Pending"), ("verified", "Verified"), ("rejected", "Rejected")), default="pending")
+    authoritative_source = models.CharField(max_length=160, blank=True)
+    authority_reference = models.CharField(max_length=160, blank=True)
+    performed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True)
+    performed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=~Q(result="verified") | (Q(authoritative_source__gt="") & Q(authority_reference__gt="") & Q(performed_by__isnull=False) & Q(performed_at__isnull=False)), name="verified_insurance_has_authority")]
+
+
+class AbhaIntegrationConsent(TimestampedModel):
+    patient = models.ForeignKey("Patient", on_delete=models.PROTECT, related_name="abha_consents")
+    consent_reference = models.CharField(max_length=160, unique=True)
+    purpose = models.TextField()
+    granted_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    external_link_reference = models.CharField(max_length=160, blank=True)
+
+
 class Supplier(TimestampedModel):
     code = models.CharField(max_length=32, unique=True)
     name = models.CharField(max_length=160)
