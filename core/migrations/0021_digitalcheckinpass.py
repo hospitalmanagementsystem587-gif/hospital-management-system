@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0017_hospitalfacility_hospitalfaq_department_description_and_more'),
+        ('core', '0020_insurance_abha_readiness'),
     ]
 
     operations = [

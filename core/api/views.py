@@ -1039,9 +1039,7 @@ class DigitalCheckInConsumeView(APIView):
             if qr_pass.revoked_at or qr_pass.expires_at <= timezone.now():
                 raise Http404("Pass not found")
             if qr_pass.consumed_at:
-                if appointment.status == Appointment.Status.CHECKED_IN:
-                    return Response({"appointment_id": appointment.pk, "status": "checked_in", "replayed": True})
-                raise Http404("Pass not found")
+                return Response({"detail": "Pass has already been consumed."}, status=409)
             if appointment.status != Appointment.Status.SCHEDULED:
                 return Response({"detail": "Appointment is not eligible for check-in."}, status=409)
             now = timezone.now()
