@@ -47,3 +47,12 @@ does not trust client-supplied portal headers or query-string overrides.
 Local defaults are `admin.localhost`, `staff.localhost`, `store.localhost`,
 `patient.localhost`, and `agent.localhost`; Django accepts `.localhost` while
 debugging.
+
+## Shared Authentication & Session Layer (KAN-36)
+
+- **Identity authority:** Django built-in auth (`django.contrib.auth`) remains the single identity authority.
+- **Login & Logout:** Shared login at `/accounts/login/` via `HospitalLoginView` with failed login rate limiting (5 attempts per IP+username per 10 minutes), safe `next` parameter validation via `url_has_allowed_host_and_scheme`, and secure POST logout via Django's `LogoutView` at `/accounts/logout/`.
+- **Session expiry:** Configurable via `DJANGO_SESSION_COOKIE_AGE` (defaults to 28,800s / 8h), expiring at browser close (`SESSION_EXPIRE_AT_BROWSER_CLOSE = True`).
+- **Cookie & Subdomain Policy:** Cookies use `HttpOnly`, `SameSite=Lax`, and `Secure` when `DEBUG=False`. Cookie domains are configurable via `DJANGO_SESSION_COOKIE_DOMAIN` and `DJANGO_CSRF_COOKIE_DOMAIN` (e.g. `.example.com` for cross-subdomain single sign-on across `*.example.com`, or omitted/None for strict host-only session isolation).
+- **Portal Context:** `request.portal` is set by `PortalRoutingMiddleware` and passed down to templates via `core.context_processors.hospital_context`.
+
