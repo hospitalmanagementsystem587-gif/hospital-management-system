@@ -1849,33 +1849,36 @@ def admission_create(request):
     form = AdmissionForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            admission = form.save(commit=False)
-            admission.admission_number = next_number("ADMISSION")
-            admission.admitted_by = StaffProfile.objects.filter(
-                user=request.user
-            ).first()
-            admission.save()
+            bed = Bed.objects.select_for_update().get(pk=form.cleaned_data["bed"].pk)
+            if bed.status != Bed.Status.AVAILABLE:
+                form.add_error("bed", "Selected bed is no longer available.")
+            else:
+                admission = form.save(commit=False)
+                admission.admission_number = next_number("ADMISSION")
+                admission.admitted_by = StaffProfile.objects.filter(
+                    user=request.user
+                ).first()
+                admission.save()
 
-            # Mark bed as occupied
-            bed = admission.bed
-            bed.status = Bed.Status.OCCUPIED
-            bed.save(update_fields=["status"])
+                # Mark bed as occupied
+                bed.status = Bed.Status.OCCUPIED
+                bed.save(update_fields=["status"])
 
-            _audit_patient_change(
-                request,
-                admission.patient,
-                "ipd.patient_admitted",
-                [
-                    f"adm:{admission.admission_number}",
-                    f"ward:{bed.ward.name}",
-                    f"bed:{bed.bed_number}",
-                ],
-            )
-        messages.success(
-            request,
-            f"Patient {admission.patient.full_name} admitted to {bed.ward.name} (Bed {bed.bed_number}) successfully.",
-        )
-        return redirect("admission_detail", pk=admission.pk)
+                _audit_patient_change(
+                    request,
+                    admission.patient,
+                    "ipd.patient_admitted",
+                    [
+                        f"adm:{admission.admission_number}",
+                        f"ward:{bed.ward.name}",
+                        f"bed:{bed.bed_number}",
+                    ],
+                )
+                messages.success(
+                    request,
+                    f"Patient {admission.patient.full_name} admitted to {bed.ward.name} (Bed {bed.bed_number}) successfully.",
+                )
+                return redirect("admission_detail", pk=admission.pk)
 
     return render(
         request,
