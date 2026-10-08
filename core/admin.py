@@ -4,11 +4,12 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin
 from django.core.exceptions import PermissionDenied
+from django.db import models
 from django.db.models import Sum
 from django.shortcuts import redirect
 from django.utils import timezone
 
-from .forms import HospitalSettingsForm
+from .forms import DepartmentForm, HospitalSettingsForm
 from .models import (
     Admission,
     Appointment,
@@ -205,9 +206,44 @@ class NumberSequenceAdmin(admin.ModelAdmin):
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "is_active")
+    form = DepartmentForm
+    list_display = ("code", "name", "display_order", "is_active", "staff_count", "updated_at")
+    list_editable = ("display_order", "is_active")
     list_filter = ("is_active",)
-    search_fields = ("code", "name")
+    search_fields = ("code", "name", "description")
+    ordering = ("display_order", "name")
+
+    fieldsets = (
+        (
+            "Department Information",
+            {
+                "fields": ("code", "name", "description"),
+                "description": "Core departmental identification. Code is used for internal routing and reporting.",
+            },
+        ),
+        (
+            "Display & Navigation",
+            {
+                "fields": ("icon_name", "display_order", "is_active"),
+                "description": "Controls sorting order and public/clinical availability.",
+            },
+        ),
+    )
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(models_staff_count=models.Count("staff", distinct=True))
+
+    def staff_count(self, obj):
+        return getattr(obj, "models_staff_count", obj.staff.count())
+    staff_count.short_description = "Assigned Staff"
+    staff_count.admin_order_field = "models_staff_count"
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.staff.exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
 
 
 @admin.register(VisitType)

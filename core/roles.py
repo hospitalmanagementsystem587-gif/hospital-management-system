@@ -99,6 +99,7 @@ ROLE_PERMISSIONS = {
         "core.view_department",
         "core.add_department",
         "core.change_department",
+        "core.delete_department",
         "core.view_visittype",
         "core.add_visittype",
         "core.change_visittype",
