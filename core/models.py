@@ -1689,6 +1689,35 @@ class Price(TimestampedModel):
             from django.core.exceptions import ValidationError
             raise ValidationError({"effective_until": "Effective until date must be on or after effective from date."})
 
+        # Prevent overlapping active versions for the same item/price_type and scope
+        if self.is_active and self.content_type_id and self.object_id:
+            qs = Price.objects.filter(
+                content_type_id=self.content_type_id,
+                object_id=self.object_id,
+                scope=self.scope,
+                price_type=self.price_type,
+                is_active=True,
+            )
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+
+            # Check overlap logic:
+            # Existing interval: [existing.effective_from, existing.effective_until or infinity]
+            # Proposed interval: [self.effective_from, self.effective_until or infinity]
+            # Overlaps if: (existing.effective_until is None or existing.effective_until >= self.effective_from)
+            #          and (self.effective_until is None or existing.effective_from <= self.effective_until)
+            overlap_q = Q()
+            if self.effective_until is not None:
+                overlap_q &= Q(effective_from__lte=self.effective_until)
+            overlap_q &= (Q(effective_until__isnull=True) | Q(effective_until__gte=self.effective_from))
+
+            overlapping = qs.filter(overlap_q)
+            if overlapping.exists():
+                from django.core.exceptions import ValidationError
+                raise ValidationError({
+                    "effective_from": "Active price version overlaps with an existing active version for this item and scope."
+                })
+
     @classmethod
     def get_current_price(cls, item, scope="standard", as_of=None, price_type=None):
         """Resolves the current approved effective canonical Price for an item."""
