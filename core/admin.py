@@ -1,27 +1,82 @@
+from decimal import Decimal
+
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin
+from django.db.models import Sum
 from django.utils import timezone
 
 from .models import (
+    Admission,
+    Appointment,
+    Bed,
     Department,
     HospitalFacility,
     HospitalFaq,
     HealthPackage,
     HealthContent,
     HospitalSettings,
+    Invoice,
     Medicine,
+    MedicineBatch,
     NumberSequence,
+    Patient,
+    PatientFeedback,
+    Payment,
     PaymentMethod,
+    Prescription,
+    Refund,
     Service,
     StaffProfile,
     Supplier,
     VisitType,
-    PatientFeedback,
 )
 
 User = get_user_model()
 admin.site.unregister(User)
+
+# Customize AdminSite index view with executive management dashboard metrics
+_orig_admin_index = admin.site.index
+
+
+def _admin_management_dashboard_index(request, extra_context=None):
+    today = timezone.localdate()
+    kpis = {
+        "total_patients": Patient.objects.filter(archived_at__isnull=True).count(),
+        "today_appointments": Appointment.objects.filter(scheduled_at__date=today).count(),
+        "today_collections": Payment.objects.filter(received_at__date=today).aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00"),
+        "today_refunds": Refund.objects.filter(
+            created_at__date=today, status=Refund.Status.ISSUED
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00"),
+        "unsettled_invoices": Invoice.objects.filter(status=Invoice.Status.ISSUED).count(),
+        "active_admissions": Admission.objects.filter(status=Admission.Status.ADMITTED).count(),
+        "occupied_beds": Bed.objects.filter(status=Bed.Status.OCCUPIED).count(),
+        "available_beds": Bed.objects.filter(status=Bed.Status.AVAILABLE).count(),
+        "total_beds": Bed.objects.count(),
+        "low_stock_batches": MedicineBatch.objects.filter(
+            quantity_on_hand__lt=10, is_quarantined=False
+        ).count(),
+        "expired_batches": MedicineBatch.objects.filter(expiry_date__lt=today).count(),
+        "issued_prescriptions": Prescription.objects.filter(
+            status=Prescription.Status.ISSUED
+        ).count(),
+        "pending_feedback": PatientFeedback.objects.filter(
+            status=PatientFeedback.Status.PENDING
+        ).count(),
+        "total_staff": StaffProfile.objects.count(),
+    }
+    dashboard_context = {
+        "kpis": kpis,
+        "today": today,
+        **(extra_context or {}),
+    }
+    return _orig_admin_index(request, extra_context=dashboard_context)
+
+
+admin.site.index = _admin_management_dashboard_index
+
 
 
 @admin.register(User)

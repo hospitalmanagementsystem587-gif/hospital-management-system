@@ -1,0 +1,379 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static "admin/css/dashboard.css" %}">
+<link rel="stylesheet" href="{% static "core/style.css" %}?v=4">
+{% endblock %}
+
+{% block coltype %}colMS{% endblock %}
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+
+{% block content %}
+<div id="content-main" class="admin-dashboard-wrap">
+  <!-- Executive Management Header / Hero -->
+  <section class="admin-dashboard-hero" aria-labelledby="admin-hero-heading">
+    <div>
+      <span class="page-kicker">{% translate "Executive Management" %}</span>
+      <h1 id="admin-hero-heading" class="admin-hero-title">
+        {% if hospital.name and hospital.name != 'Hospital name not configured' %}{{ hospital.name }}{% else %}Vedant Hospital{% endif %}
+      </h1>
+      <p class="admin-hero-subtitle">
+        {% translate "Hospital Management & CMS Control Center • Date:" %} {{ today|date:"l, d F Y" }}
+      </p>
+    </div>
+    <div class="admin-hero-badges">
+      {% include "core/components/badge.html" with variant="success" dot=True label="System Online" %}
+      {% include "core/components/badge.html" with variant="info" label="Admin Portal" %}
+    </div>
+  </section>
+
+  <!-- 1. Executive Key Performance Indicators Grid -->
+  <section aria-labelledby="kpi-heading">
+    <h2 id="kpi-heading" class="admin-section-heading">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+      <span>{% translate "Executive KPI Overview" %}</span>
+    </h2>
+
+    <div class="admin-kpi-grid">
+      <!-- Active Patients KPI -->
+      <div class="admin-kpi-card">
+        <div class="admin-kpi-header">
+          <span class="admin-kpi-title">{% translate "Total Active Patients" %}</span>
+          <div class="admin-kpi-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+        </div>
+        <div class="admin-kpi-value">{{ kpis.total_patients|default:0 }}</div>
+        <div class="admin-kpi-footer">
+          <span>{% translate "Master Patient Index" %}</span>
+          {% include "core/components/badge.html" with variant="info" text="EMR" %}
+        </div>
+      </div>
+
+      <!-- Today's Appointments KPI -->
+      <div class="admin-kpi-card">
+        <div class="admin-kpi-header">
+          <span class="admin-kpi-title">{% translate "Today's Appointments" %}</span>
+          <div class="admin-kpi-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+          </div>
+        </div>
+        <div class="admin-kpi-value">{{ kpis.today_appointments|default:0 }}</div>
+        <div class="admin-kpi-footer">
+          <span>{% translate "Booked for today" %}</span>
+          {% include "core/components/badge.html" with variant="info" text="OPD" %}
+        </div>
+      </div>
+
+      <!-- Today's Collections KPI -->
+      <div class="admin-kpi-card">
+        <div class="admin-kpi-header">
+          <span class="admin-kpi-title">{% translate "Today's Collections" %}</span>
+          <div class="admin-kpi-icon" style="color: #8b5cf6;" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+          </div>
+        </div>
+        <div class="admin-kpi-value">₹{{ kpis.today_collections|floatformat:2|default:"0.00" }}</div>
+        <div class="admin-kpi-footer">
+          <span>{% translate "Received revenue" %}</span>
+          {% include "core/components/badge.html" with variant="success" text="Audited" %}
+        </div>
+      </div>
+
+      <!-- Inpatient Admissions KPI -->
+      <div class="admin-kpi-card">
+        <div class="admin-kpi-header">
+          <span class="admin-kpi-title">{% translate "Active Inpatients" %}</span>
+          <div class="admin-kpi-icon" style="color: var(--color-primary);" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><circle cx="6" cy="8" r="2"/></svg>
+          </div>
+        </div>
+        <div class="admin-kpi-value">{{ kpis.active_admissions|default:0 }}</div>
+        <div class="admin-kpi-footer">
+          <span>{% translate "Currently admitted" %}</span>
+          {% include "core/components/badge.html" with variant="neutral" text="IPD" %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Operations Breakdown Grid -->
+  <section aria-labelledby="operations-heading">
+    <h2 id="operations-heading" class="admin-section-heading">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      <span>{% translate "Departmental & Operational Summary" %}</span>
+    </h2>
+
+    <div class="admin-operations-grid">
+      <!-- Inpatient Bed Occupancy Card -->
+      <div class="hms-card">
+        <div class="hms-card-header">
+          <div class="hms-card-heading-group">
+            <span class="page-kicker">{% translate "Inpatient Department" %}</span>
+            <h3 class="hms-card-title">{% translate "Bed Occupancy Status" %}</h3>
+          </div>
+          {% if kpis.total_beds > 0 %}
+            {% include "core/components/badge.html" with variant="info" label="Live IPD" %}
+          {% else %}
+            {% include "core/components/badge.html" with variant="neutral" label="No Beds" %}
+          {% endif %}
+        </div>
+        <div class="hms-card-body">
+          {% if kpis.total_beds > 0 %}
+            <div class="admin-stat-row">
+              <span class="admin-stat-label">{% translate "Occupied Beds" %}</span>
+              <span class="admin-stat-value">{{ kpis.occupied_beds }}</span>
+            </div>
+            <div class="admin-stat-row">
+              <span class="admin-stat-label">{% translate "Available Beds" %}</span>
+              <span class="admin-stat-value">{{ kpis.available_beds }}</span>
+            </div>
+            <div class="admin-stat-row">
+              <span class="admin-stat-label">{% translate "Total Hospital Beds" %}</span>
+              <span class="admin-stat-value">{{ kpis.total_beds }}</span>
+            </div>
+            <div class="admin-stat-row">
+              <span class="admin-stat-label">{% translate "Active Inpatient Admissions" %}</span>
+              <span class="admin-stat-value">{{ kpis.active_admissions }}</span>
+            </div>
+          {% else %}
+            {% include "core/components/empty_state.html" with title="No hospital beds configured" description="No inpatient beds or wards have been created in the system yet." %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Financial & Billing Summary Card -->
+      <div class="hms-card">
+        <div class="hms-card-header">
+          <div class="hms-card-heading-group">
+            <span class="page-kicker">{% translate "Revenue & Accounts" %}</span>
+            <h3 class="hms-card-title">{% translate "Financial Overview" %}</h3>
+          </div>
+          {% include "core/components/badge.html" with variant="success" label="Reconciled" %}
+        </div>
+        <div class="hms-card-body">
+          <div class="admin-stat-row">
+            <span class="admin-stat-label">{% translate "Today's Collections" %}</span>
+            <span class="admin-stat-value">₹{{ kpis.today_collections|floatformat:2|default:"0.00" }}</span>
+          </div>
+          <div class="admin-stat-row">
+            <span class="admin-stat-label">{% translate "Today's Refunds Issued" %}</span>
+            <span class="admin-stat-value">₹{{ kpis.today_refunds|floatformat:2|default:"0.00" }}</span>
+          </div>
+          <div class="admin-stat-row">
+            <span class="admin-stat-label">{% translate "Unsettled Invoices" %}</span>
+            <span class="admin-stat-value">{{ kpis.unsettled_invoices|default:0 }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pharmacy Stock & Dispensing Alerts Card -->
+      <div class="hms-card">
+        <div class="hms-card-header">
+          <div class="hms-card-heading-group">
+            <span class="page-kicker">{% translate "Pharmacy & Inventory" %}</span>
+            <h3 class="hms-card-title">{% translate "Stock & Dispensing Health" %}</h3>
+          </div>
+          {% if kpis.low_stock_batches > 0 or kpis.expired_batches > 0 %}
+            {% include "core/components/badge.html" with variant="warning" label="Alerts Active" %}
+          {% else %}
+            {% include "core/components/badge.html" with variant="success" label="Stock Healthy" %}
+          {% endif %}
+        </div>
+        <div class="hms-card-body">
+          <div class="admin-stat-row">
+            <span class="admin-stat-label">{% translate "Low Stock Batches (<10 units)" %}</span>
+            <span class="admin-stat-value">
+              {{ kpis.low_stock_batches|default:0 }}
+              {% if kpis.low_stock_batches > 0 %}
+                <span class="hms-badge hms-badge-warning" style="margin-left: 0.5rem;">{% translate "Restock" %}</span>
+              {% endif %}
+            </span>
+          </div>
+          <div class="admin-stat-row">
+            <span class="admin-stat-label">{% translate "Expired Batches" %}</span>
+            <span class="admin-stat-value">
+              {{ kpis.expired_batches|default:0 }}
+              {% if kpis.expired_batches > 0 %}
+                <span class="hms-badge hms-badge-danger" style="margin-left: 0.5rem;">{% translate "Quarantine" %}</span>
+              {% endif %}
+            </span>
+          </div>
+          <div class="admin-stat-row">
+            <span class="admin-stat-label">{% translate "Active Issued Prescriptions" %}</span>
+            <span class="admin-stat-value">{{ kpis.issued_prescriptions|default:0 }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feedback & Quality Assurance Card -->
+      <div class="hms-card">
+        <div class="hms-card-header">
+          <div class="hms-card-heading-group">
+            <span class="page-kicker">{% translate "Quality & Patient Experience" %}</span>
+            <h3 class="hms-card-title">{% translate "Feedback & Staffing" %}</h3>
+          </div>
+          {% if kpis.pending_feedback > 0 %}
+            {% include "core/components/badge.html" with variant="warning" label="Moderation Req." %}
+          {% else %}
+            {% include "core/components/badge.html" with variant="neutral" label="All Reviewed" %}
+          {% endif %}
+        </div>
+        <div class="hms-card-body">
+          <div class="admin-stat-row">
+            <span class="admin-stat-label">{% translate "Feedback Awaiting Moderation" %}</span>
+            <span class="admin-stat-value">
+              {{ kpis.pending_feedback|default:0 }}
+              {% if kpis.pending_feedback > 0 %}
+                <a href="{% url 'admin:core_patientfeedback_changelist' %}" class="hms-badge hms-badge-warning" style="margin-left: 0.5rem; text-decoration: none;">
+                  {% translate "Review" %} &rarr;
+                </a>
+              {% endif %}
+            </span>
+          </div>
+          <div class="admin-stat-row">
+            <span class="admin-stat-label">{% translate "Total Staff Profiles" %}</span>
+            <span class="admin-stat-value">{{ kpis.total_staff|default:0 }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Authorized Management Quick Actions -->
+  <section aria-labelledby="quick-links-heading" style="margin-bottom: 2rem;">
+    <h2 id="quick-links-heading" class="admin-section-heading">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <span>{% translate "Management Directory & System Registries" %}</span>
+    </h2>
+
+    <div class="admin-quick-links-grid">
+      <a href="{% url 'admin:core_staffprofile_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <span>{% translate "Staff Profiles" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:core_department_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          <span>{% translate "Departments" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:core_service_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="16"/><line x1="8" x2="16" y1="12" y2="12"/></svg>
+          <span>{% translate "Hospital Services" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:core_healthpackage_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
+          <span>{% translate "Health Packages" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:core_medicine_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>
+          <span>{% translate "Medicines Directory" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:core_supplier_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+          <span>{% translate "Suppliers" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:core_patientfeedback_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>{% translate "Patient Feedback" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:core_hospitalsettings_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>{% translate "Hospital Settings" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:auth_user_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>{% translate "User Accounts" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+
+      <a href="{% url 'admin:auth_group_changelist' %}" class="admin-quick-link">
+        <div class="admin-quick-link-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>{% translate "Groups & Permissions" %}</span>
+        </div>
+        <span class="admin-quick-link-arrow">&rarr;</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- 4. Standard Django Admin Application List (Preserves Full Customization & Changeling URLs) -->
+  <section aria-labelledby="applications-heading">
+    <h2 id="applications-heading" class="admin-section-heading">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+      <span>{% translate "Application Registries" %}</span>
+    </h2>
+    {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+  </section>
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+  <div class="module" id="recent-actions-module">
+    <h2>{% translate 'Recent actions' %}</h2>
+    <h3>{% translate 'My actions' %}</h3>
+    {% load log %}
+    {% get_admin_log 10 as admin_log for_user user %}
+    {% if not admin_log %}
+      <p>{% translate 'None available' %}</p>
+    {% else %}
+      <ul class="actionlist">
+        {% for entry in admin_log %}
+          <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+            <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
+            {% if entry.is_deletion or not entry.get_admin_url %}
+              {{ entry.object_repr }}
+            {% else %}
+              <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+            {% endif %}
+            <br>
+            {% if entry.content_type %}
+              <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+            {% else %}
+              <span class="mini quiet">{% translate 'Unknown content' %}</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

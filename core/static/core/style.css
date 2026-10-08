@@ -4634,3 +4634,199 @@ dialog.hms-dialog::backdrop {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* 9. Admin Management Dashboard (KAN-39) */
+.admin-dashboard-wrap {
+  margin-bottom: 2rem;
+  font-family: var(--font-sans);
+}
+
+.admin-dashboard-hero {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.admin-hero-title {
+  font-size: var(--font-size-2xl);
+  font-weight: 800;
+  color: var(--color-secondary);
+  margin: 0 0 0.25rem 0;
+  letter-spacing: -0.02em;
+}
+
+.admin-hero-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.admin-hero-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.admin-section-heading {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-secondary);
+  margin: 0 0 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.admin-kpi-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 150px;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.admin-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-kpi-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-kpi-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.admin-kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.admin-kpi-value {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: var(--color-secondary);
+  line-height: 1.1;
+  margin: 0.5rem 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-kpi-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: 0.625rem;
+  margin-top: 0.5rem;
+}
+
+.admin-operations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.admin-quick-links-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.admin-quick-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.125rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-secondary);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-fast);
+}
+
+.admin-quick-link:hover {
+  background: var(--color-surface-container-low);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.admin-quick-link-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.admin-quick-link-arrow {
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.admin-quick-link:hover .admin-quick-link-arrow {
+  transform: translateX(3px);
+  color: var(--color-primary);
+}
+
+.admin-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-sm);
+}
+
+.admin-stat-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.admin-stat-label {
+  color: var(--color-text-muted);
+}
+
+.admin-stat-value {
+  font-weight: 700;
+  color: var(--color-secondary);
+  font-variant-numeric: tabular-nums;
+}
