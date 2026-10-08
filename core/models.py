@@ -70,10 +70,50 @@ class StaffProfile(TimestampedModel):
     consultation_fee = models.PositiveIntegerField(default=500)
     biography = models.TextField(blank=True)
     is_public = models.BooleanField(default=True)
+    specialties = models.ManyToManyField(
+        Specialty,
+        through="DoctorSpecialty",
+        related_name="doctors",
+        blank=True,
+    )
 
     def __str__(self):
         display_name = self.user.get_full_name() or self.user.get_username()
         return f"{display_name} · {self.employee_id}"
+
+
+class DoctorSpecialty(TimestampedModel):
+    doctor = models.ForeignKey(
+        StaffProfile,
+        on_delete=models.CASCADE,
+        related_name="doctor_specialties",
+    )
+    specialty = models.ForeignKey(
+        Specialty,
+        on_delete=models.PROTECT,
+        related_name="specialty_doctors",
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="Indicates whether this is the doctor's primary specialty.",
+    )
+
+    class Meta:
+        verbose_name = "Doctor Specialty"
+        verbose_name_plural = "Doctor Specialties"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["doctor", "specialty"],
+                name="unique_doctor_specialty",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["doctor", "is_primary"], name="doc_spec_prim_idx"),
+        ]
+
+    def __str__(self):
+        primary_suffix = " (Primary)" if self.is_primary else ""
+        return f"{self.doctor} - {self.specialty}{primary_suffix}"
 
 
 class HospitalSettings(TimestampedModel):

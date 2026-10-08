@@ -106,6 +106,10 @@ class DoctorManagementCMSTests(TestCase):
             "consultation_fee": "1000",
             "biography": "Chief cardiologist with over 18 years of clinical experience.",
             "is_public": "on",
+            "doctor_specialties-TOTAL_FORMS": "0",
+            "doctor_specialties-INITIAL_FORMS": "0",
+            "doctor_specialties-MIN_NUM_FORMS": "0",
+            "doctor_specialties-MAX_NUM_FORMS": "1000",
             "_save": "Save",
         }
         response = self.client.post(change_url, data=payload, follow=True, HTTP_HOST="admin.hms.test")

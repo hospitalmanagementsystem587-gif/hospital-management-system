@@ -101,6 +101,8 @@ class DoctorSerializer(serializers.ModelSerializer):
     consultation_fee = serializers.IntegerField(read_only=True)
     rating = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
+    specialties = serializers.SerializerMethodField()
+    primary_specialty = serializers.SerializerMethodField()
 
     class Meta:
         model = StaffProfile
@@ -120,7 +122,26 @@ class DoctorSerializer(serializers.ModelSerializer):
             "biography",
             "rating",
             "review_count",
+            "specialties",
+            "primary_specialty",
         ]
+
+    def get_specialties(self, obj):
+        return [
+            {
+                "id": rel.specialty.id,
+                "code": rel.specialty.code,
+                "name": rel.specialty.name,
+                "is_primary": rel.is_primary,
+            }
+            for rel in obj.doctor_specialties.filter(specialty__is_active=True).select_related("specialty").order_by("-is_primary", "specialty__display_order")
+        ]
+
+    def get_primary_specialty(self, obj):
+        prim = obj.doctor_specialties.filter(is_primary=True, specialty__is_active=True).select_related("specialty").first()
+        if prim:
+            return {"id": prim.specialty.id, "code": prim.specialty.code, "name": prim.specialty.name}
+        return None
 
     def get_full_name(self, obj):
         return obj.user.get_full_name() or obj.user.username

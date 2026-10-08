@@ -351,6 +351,13 @@ class DoctorListView(generics.ListAPIView):
         dept = self.request.query_params.get("department")
         if dept:
             qs = qs.filter(department__code__iexact=dept) | qs.filter(department__name__iexact=dept)
+        specialty = self.request.query_params.get("specialty")
+        if specialty:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(doctor_specialties__specialty__code__iexact=specialty)
+                | Q(doctor_specialties__specialty__name__iexact=specialty)
+            ).distinct()
         search = self.request.query_params.get("search")
         if search:
             from django.db.models import Q
@@ -360,7 +367,8 @@ class DoctorListView(generics.ListAPIView):
                 | Q(department__name__icontains=search)
                 | Q(qualifications__icontains=search)
                 | Q(biography__icontains=search)
-            )
+                | Q(doctor_specialties__specialty__name__icontains=search)
+            ).distinct()
         return qs
 
 

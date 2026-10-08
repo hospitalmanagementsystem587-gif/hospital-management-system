@@ -15,6 +15,7 @@ from .models import (
     Appointment,
     Bed,
     Department,
+    DoctorSpecialty,
     HospitalFacility,
     HospitalFaq,
     HealthPackage,
@@ -133,9 +134,31 @@ class StaffUserAdmin(UserAdmin):
         return False
 
 
+class DoctorSpecialtyInline(admin.TabularInline):
+    model = DoctorSpecialty
+    extra = 1
+    autocomplete_fields = ("specialty",)
+    fields = ("specialty", "is_primary")
+
+
+@admin.register(DoctorSpecialty)
+class DoctorSpecialtyAdmin(admin.ModelAdmin):
+    list_display = ("doctor", "specialty", "is_primary", "updated_at")
+    list_filter = ("is_primary", "specialty")
+    search_fields = (
+        "doctor__employee_id",
+        "doctor__user__first_name",
+        "doctor__user__last_name",
+        "specialty__name",
+        "specialty__code",
+    )
+    autocomplete_fields = ("specialty",)
+
+
 @admin.register(StaffProfile)
 class StaffProfileAdmin(admin.ModelAdmin):
     form = StaffProfileForm
+    inlines = [DoctorSpecialtyInline]
     list_display = (
         "employee_id",
         "user_full_name",
