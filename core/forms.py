@@ -14,6 +14,8 @@ from .models import (
     DiagnosticTest,
     HealthContent,
     HealthPackage,
+    HospitalFacility,
+    HospitalFaq,
     HospitalSettings,
     InpatientDeposit,
     Patient,
@@ -906,3 +908,81 @@ class HealthContentForm(forms.ModelForm):
         if effective_from and expires_on and expires_on < effective_from:
             raise forms.ValidationError({"expires_on": "Expiry date must be on or after effective from date."})
         return cleaned_data
+
+
+class HospitalFacilityForm(forms.ModelForm):
+    """Administrator CMS form for hospital physical and clinical facilities."""
+
+    class Meta:
+        model = HospitalFacility
+        fields = (
+            "title",
+            "category",
+            "description",
+            "highlight",
+            "display_order",
+            "is_active",
+        )
+        widgets = {
+            "title": forms.TextInput(attrs={"placeholder": "e.g. 24x7 Emergency Trauma Center", "class": "vTextField"}),
+            "category": forms.TextInput(attrs={"placeholder": "e.g. Critical Care, Diagnostics, Amenities", "class": "vTextField"}),
+            "description": forms.Textarea(attrs={"rows": 4, "placeholder": "Detailed description of facility capabilities...", "class": "vLargeTextField"}),
+            "highlight": forms.TextInput(attrs={"placeholder": "e.g. Level-1 Trauma Certified, 128-Slice CT", "class": "vTextField"}),
+            "display_order": forms.NumberInput(attrs={"class": "vIntegerField", "min": 0}),
+        }
+
+    def clean_title(self):
+        title = (self.cleaned_data.get("title") or "").strip()
+        if not title:
+            raise forms.ValidationError("Facility title is required.")
+        qs = HospitalFacility.objects.filter(title__iexact=title)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Facility with title '{title}' already exists.")
+        return title
+
+    def clean_display_order(self):
+        order = self.cleaned_data.get("display_order")
+        if order is not None and order < 0:
+            raise forms.ValidationError("Display order cannot be negative.")
+        return order
+
+
+class HospitalFaqForm(forms.ModelForm):
+    """Administrator CMS form for patient questions and knowledge base answers."""
+
+    class Meta:
+        model = HospitalFaq
+        fields = (
+            "question",
+            "answer",
+            "category",
+            "highlight_tag",
+            "display_order",
+            "is_active",
+        )
+        widgets = {
+            "question": forms.TextInput(attrs={"placeholder": "e.g. What are the hospital visiting hours?", "class": "vTextField"}),
+            "answer": forms.Textarea(attrs={"rows": 4, "placeholder": "Clear and concise response for patients...", "class": "vLargeTextField"}),
+            "category": forms.TextInput(attrs={"placeholder": "e.g. OPD & Appointments, Billing & Insurance", "class": "vTextField"}),
+            "highlight_tag": forms.TextInput(attrs={"placeholder": "e.g. OPD Timings, Insurance", "class": "vTextField"}),
+            "display_order": forms.NumberInput(attrs={"class": "vIntegerField", "min": 0}),
+        }
+
+    def clean_question(self):
+        question = (self.cleaned_data.get("question") or "").strip()
+        if not question:
+            raise forms.ValidationError("Question is required.")
+        qs = HospitalFaq.objects.filter(question__iexact=question)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("FAQ with this question already exists.")
+        return question
+
+    def clean_display_order(self):
+        order = self.cleaned_data.get("display_order")
+        if order is not None and order < 0:
+            raise forms.ValidationError("Display order cannot be negative.")
+        return order

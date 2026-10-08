@@ -15,6 +15,8 @@ from .forms import (
     DoctorScheduleForm,
     HealthContentForm,
     HealthPackageForm,
+    HospitalFacilityForm,
+    HospitalFaqForm,
     HospitalSettingsForm,
     ServiceForm,
     SpecialtyForm,
@@ -641,16 +643,70 @@ class MedicineAdmin(admin.ModelAdmin):
 
 @admin.register(HospitalFacility)
 class HospitalFacilityAdmin(admin.ModelAdmin):
-    list_display = ("title", "category", "highlight", "display_order", "is_active")
+    form = HospitalFacilityForm
+    list_display = (
+        "title",
+        "category",
+        "highlight",
+        "display_order",
+        "is_active",
+        "updated_at",
+    )
+    list_editable = ("display_order", "is_active")
     list_filter = ("is_active", "category")
-    search_fields = ("title", "category", "description")
+    search_fields = ("title", "category", "description", "highlight")
+    ordering = ("display_order", "title")
+
+    fieldsets = (
+        (
+            "Facility Identity & Placement",
+            {
+                "fields": ("title", "category", "display_order", "is_active"),
+                "description": "Facility name, medical category, display sequence on website, and visibility toggle.",
+            },
+        ),
+        (
+            "Overview & Accreditations",
+            {
+                "fields": ("highlight", "description"),
+                "description": "Badge/highlight tags and detailed description for patient-facing directory.",
+            },
+        ),
+    )
 
 
 @admin.register(HospitalFaq)
 class HospitalFaqAdmin(admin.ModelAdmin):
-    list_display = ("question", "category", "highlight_tag", "display_order", "is_active")
+    form = HospitalFaqForm
+    list_display = (
+        "question",
+        "category",
+        "highlight_tag",
+        "display_order",
+        "is_active",
+        "updated_at",
+    )
+    list_editable = ("display_order", "is_active")
     list_filter = ("is_active", "category")
-    search_fields = ("question", "answer", "category")
+    search_fields = ("question", "answer", "category", "highlight_tag")
+    ordering = ("display_order", "id")
+
+    fieldsets = (
+        (
+            "FAQ Classification & Visibility",
+            {
+                "fields": ("category", "highlight_tag", "display_order", "is_active"),
+                "description": "FAQ topic category, quick filter tags, priority sort order, and active status.",
+            },
+        ),
+        (
+            "Question & Clinical/Administrative Answer",
+            {
+                "fields": ("question", "answer"),
+                "description": "Clear inquiry heading and comprehensive public answer.",
+            },
+        ),
+    )
 
 
 @admin.register(PatientFeedback)
