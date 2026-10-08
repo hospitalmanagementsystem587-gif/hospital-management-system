@@ -100,7 +100,7 @@ def get_authorized_appointment_queryset(user):
         return Appointment.objects.none()
 
     groups = set(user.groups.values_list("name", flat=True))
-    if "Reception" in groups:
+    if "Reception" in groups or "Administrator" in groups:
         return Appointment.objects.all()
 
     if "Doctor" in groups:

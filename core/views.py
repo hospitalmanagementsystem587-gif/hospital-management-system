@@ -813,7 +813,7 @@ def _appointment_read_queryset(user):
     appointments = get_authorized_appointment_queryset(user)
     if user.is_superuser or (
         StaffProfile.objects.filter(user=user).exists()
-        and user.groups.filter(name__in=("Reception", "Doctor")).exists()
+        and user.groups.filter(name__in=("Reception", "Doctor", "Administrator")).exists()
     ):
         return appointments
     raise PermissionDenied
@@ -866,6 +866,8 @@ def appointment_list(request):
             "summary": summary,
             "is_reception": _has_role(request.user, "Reception"),
             "is_doctor": _has_role(request.user, "Doctor"),
+            "is_admin": _has_role(request.user, "Administrator"),
+            "can_manage_appointments": _has_role(request.user, "Reception") or _has_role(request.user, "Administrator"),
         },
     )
 
@@ -873,7 +875,7 @@ def appointment_list(request):
 @permission_required("core.add_appointment", raise_exception=True)
 def appointment_create(request):
     if (
-        not _has_role(request.user, "Reception")
+        not (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
@@ -917,7 +919,7 @@ def appointment_create(request):
 @permission_required("core.change_appointment", raise_exception=True)
 def appointment_reschedule(request, pk):
     if (
-        not _has_role(request.user, "Reception")
+        not (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
@@ -983,7 +985,7 @@ def appointment_transition(request, pk):
     }
     transitions = (
         reception_transitions
-        if _has_role(request.user, "Reception")
+        if (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
         else doctor_transitions
         if _has_role(request.user, "Doctor")
         else {}

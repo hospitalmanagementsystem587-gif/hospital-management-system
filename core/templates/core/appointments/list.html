@@ -9,7 +9,7 @@
     <h1>Appointments</h1>
     <p>{% if is_doctor %}Review today’s patient flow and continue active encounters.{% else %}Coordinate bookings, check-ins, and the live consultation queue.{% endif %}</p>
   </div>
-  {% if is_reception %}
+  {% if can_manage_appointments %}
     <a href="{% url 'appointment_create' %}" class="btn-stitch-primary schedule-primary-action">
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       New appointment
@@ -93,7 +93,7 @@
               <td>
                 <div class="schedule-care">
                   <strong>Dr. {{ appointment.doctor.user.get_full_name|default:appointment.doctor.user.username }}</strong>
-                  <span>{{ appointment.visit_type.name }}</span>
+                  <span>{{ appointment.visit_type.name }} · ₹{{ appointment.doctor.get_consultation_price }}</span>
                 </div>
               </td>
               <td>
@@ -101,14 +101,14 @@
               </td>
               <td>
                 <div class="schedule-actions">
-                  {% if is_reception and appointment.status == 'scheduled' %}
+                  {% if can_manage_appointments and appointment.status == 'scheduled' %}
                     <form method="post" action="{% url 'appointment_transition' appointment.pk %}">
                       {% csrf_token %}
                       <button name="action" value="check_in" class="row-action-primary">Check in</button>
                     </form>
                     <a href="{% url 'appointment_reschedule' appointment.pk %}" class="row-action-secondary">Reschedule</a>
                   {% endif %}
-                  {% if is_reception and appointment.status == 'scheduled' or is_reception and appointment.status == 'checked_in' %}
+                  {% if can_manage_appointments and appointment.status == 'scheduled' or can_manage_appointments and appointment.status == 'checked_in' %}
                     <details class="row-more-menu">
                       <summary aria-label="More actions">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
@@ -144,8 +144,8 @@
                 <div class="schedule-empty-state">
                   <span><svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></span>
                   <strong>No appointments on this day</strong>
-                  <p>Choose another date{% if is_reception %} or create a new appointment{% endif %}.</p>
-                  {% if is_reception %}<a href="{% url 'appointment_create' %}" class="btn-stitch-secondary">New appointment</a>{% endif %}
+                  <p>Choose another date{% if can_manage_appointments %} or create a new appointment{% endif %}.</p>
+                  {% if can_manage_appointments %}<a href="{% url 'appointment_create' %}" class="btn-stitch-secondary">New appointment</a>{% endif %}
                 </div>
               </td>
             </tr>
