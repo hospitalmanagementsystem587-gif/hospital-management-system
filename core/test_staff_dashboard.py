@@ -1,5 +1,4 @@
 from datetime import timedelta
-from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -8,13 +7,7 @@ from django.utils import timezone
 
 from core.models import (
     Appointment,
-    Invoice,
-    MedicineBatch,
     Patient,
-    Payment,
-    PaymentMethod,
-    Prescription,
-    Refund,
     StaffProfile,
     VisitType,
 )
@@ -107,6 +100,7 @@ class StaffDashboardTests(TestCase):
         response = self.client.get("/", HTTP_HOST="staff.hms.test")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Operations overview")
+        self.assertNotContains(response, 'href="/patients/"')
 
     def test_doctor_metrics_aggregate_accurately_and_scoped_to_assigned_doctor(self):
         other_doctor_user = User.objects.create_user("other_doc", password="pwd")
@@ -146,6 +140,15 @@ class StaffDashboardTests(TestCase):
             scheduled_at=now,
             status=Appointment.Status.CHECKED_IN,
         )
+        # The signed-in doctor's appointments outside today must not leak into
+        # the dashboard's daily schedule aggregate.
+        Appointment.objects.create(
+            patient=patient1,
+            doctor=self.doctor_profile,
+            visit_type=visit_type,
+            scheduled_at=now - timedelta(days=1),
+            status=Appointment.Status.CHECKED_IN,
+        )
 
         self.client.force_login(self.doctor_user)
         response = self.client.get("/", HTTP_HOST="staff.hms.test")
@@ -154,6 +157,24 @@ class StaffDashboardTests(TestCase):
         self.assertEqual(response.context["doctor_today_appointments"], 2)
         # doctor_waiting_patients should be 1 for Doctor 1 (not 2 or 3)
         self.assertEqual(response.context["doctor_waiting_patients"], 1)
+
+    def test_doctor_context_excludes_other_role_sensitive_aggregates(self):
+        self.client.force_login(self.doctor_user)
+        response = self.client.get("/", HTTP_HOST="staff.hms.test")
+
+        self.assertNotIn("reception_today_collections", response.context)
+        self.assertNotIn("admin_today_collections", response.context)
+        self.assertNotIn("admin_today_refunds", response.context)
+        self.assertNotIn("pharmacy_issued_prescriptions", response.context)
+
+    def test_pharmacy_dashboard_does_not_link_to_patient_or_billing_workspaces(self):
+        self.client.force_login(self.pharmacy_user)
+        response = self.client.get("/", HTTP_HOST="staff.hms.test")
+
+        self.assertNotContains(response, 'href="/patients/"')
+        self.assertNotContains(response, 'href="/patients/register/"')
+        self.assertNotContains(response, 'href="/invoices/"')
+        self.assertContains(response, 'href="/pharmacy/prescriptions/"')
 
     def test_doctor_without_staff_profile_renders_safely(self):
         doc_no_profile = User.objects.create_user("doc_noprof", password="pwd")
