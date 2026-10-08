@@ -69,7 +69,7 @@
             </a>
 
             <span class="sidebar-section-label">Clinical workflow</span>
-            {% if perms.core.view_patient %}
+            {% if perms.core.view_patient and not is_pharmacy and not is_admin %}
               <a href="{% url 'patient_list' %}" class="sidebar-link {% if 'patient' in request.resolver_match.url_name %}active{% endif %}">
                 <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M16 11h6"/></svg>
                 <span>Patients</span>
