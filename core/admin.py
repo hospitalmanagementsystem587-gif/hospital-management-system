@@ -9,7 +9,7 @@ from django.db.models import Sum
 from django.shortcuts import redirect
 from django.utils import timezone
 
-from .forms import DepartmentForm, HospitalSettingsForm, SpecialtyForm
+from .forms import DepartmentForm, HospitalSettingsForm, SpecialtyForm, StaffProfileForm
 from .models import (
     Admission,
     Appointment,
@@ -135,9 +135,75 @@ class StaffUserAdmin(UserAdmin):
 
 @admin.register(StaffProfile)
 class StaffProfileAdmin(admin.ModelAdmin):
-    list_display = ("employee_id", "user", "department", "job_title")
-    list_filter = ("department",)
-    search_fields = ("employee_id", "user__username", "user__email")
+    form = StaffProfileForm
+    list_display = (
+        "employee_id",
+        "user_full_name",
+        "department",
+        "job_title",
+        "is_doctor_role",
+        "is_public",
+        "consultation_fee",
+        "updated_at",
+    )
+    list_editable = ("is_public",)
+    list_filter = ("is_public", "department", "user__is_active", "user__groups")
+    search_fields = (
+        "employee_id",
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+        "user__email",
+        "job_title",
+        "qualifications",
+    )
+    raw_id_fields = ("user",)
+    ordering = ("employee_id",)
+
+    fieldsets = (
+        (
+            "Account & Internal Identity",
+            {
+                "fields": ("user", "employee_id", "department", "job_title"),
+                "description": "Internal institutional credentials, employment identity, and department placement.",
+            },
+        ),
+        (
+            "Public Profile & Clinical Credentials",
+            {
+                "fields": (
+                    "qualifications",
+                    "experience_years",
+                    "languages",
+                    "biography",
+                    "is_public",
+                ),
+                "description": "Public doctor details displayed on patient portals, directories, and website doctor profiles.",
+            },
+        ),
+        (
+            "OPD & Outpatient Practice",
+            {
+                "fields": (
+                    "opd_room",
+                    "opd_schedule",
+                    "consultation_fee",
+                ),
+                "description": "Clinic scheduling and consultation fee settings for patient appointments.",
+            },
+        ),
+    )
+
+    def user_full_name(self, obj):
+        name = obj.user.get_full_name()
+        return name if name else obj.user.get_username()
+    user_full_name.short_description = "Staff / Doctor Name"
+    user_full_name.admin_order_field = "user__first_name"
+
+    def is_doctor_role(self, obj):
+        return obj.user.groups.filter(name="Doctor").exists()
+    is_doctor_role.boolean = True
+    is_doctor_role.short_description = "Doctor Role"
 
 
 @admin.register(HospitalSettings)

@@ -564,3 +564,60 @@ class SpecialtyForm(forms.ModelForm):
     def clean_icon_name(self):
         icon = (self.cleaned_data.get("icon_name") or "").strip()
         return icon or "medical_services"
+
+
+class StaffProfileForm(forms.ModelForm):
+    """Administrator CMS form for managing staff and doctor profiles."""
+
+    class Meta:
+        model = StaffProfile
+        fields = (
+            "user",
+            "employee_id",
+            "department",
+            "job_title",
+            "qualifications",
+            "experience_years",
+            "languages",
+            "opd_room",
+            "opd_schedule",
+            "consultation_fee",
+            "biography",
+            "is_public",
+        )
+        widgets = {
+            "employee_id": forms.TextInput(attrs={"placeholder": "e.g. DOC-001 or EMP-101", "class": "vTextField"}),
+            "job_title": forms.TextInput(attrs={"placeholder": "e.g. Senior Consultant Cardiologist", "class": "vTextField"}),
+            "qualifications": forms.TextInput(attrs={"placeholder": "e.g. MBBS, MD (Cardiology), FACC", "class": "vTextField"}),
+            "experience_years": forms.NumberInput(attrs={"class": "vIntegerField", "min": 0}),
+            "languages": forms.TextInput(attrs={"placeholder": "e.g. Hindi, English", "class": "vTextField"}),
+            "opd_room": forms.TextInput(attrs={"placeholder": "e.g. OPD Room 102", "class": "vTextField"}),
+            "opd_schedule": forms.TextInput(attrs={"placeholder": "e.g. Mon-Sat: 10:00 AM - 2:00 PM", "class": "vTextField"}),
+            "consultation_fee": forms.NumberInput(attrs={"class": "vIntegerField", "min": 0}),
+            "biography": forms.Textarea(attrs={"rows": 4, "placeholder": "Clinical background, specialties, and bio...", "class": "vLargeTextField"}),
+        }
+        help_texts = {
+            "user": "Linked hospital system user account. Reuses existing staff authentication credentials.",
+            "employee_id": "Unique internal staff/practitioner identifier.",
+            "department": "Primary clinical department.",
+            "job_title": "Professional title or clinical role.",
+            "qualifications": "Academic degrees, medical certifications, and fellowships.",
+            "experience_years": "Years of clinical practice.",
+            "languages": "Spoken languages for patient consultations.",
+            "opd_room": "Consultation room or outpatient clinic number.",
+            "opd_schedule": "Clinic hours displayed on public and patient portals.",
+            "consultation_fee": "Default consultation charge in standard hospital currency.",
+            "biography": "Public clinical overview shown on website and mobile doctor directory.",
+            "is_public": "Whether this profile is listed publicly in directory searches and patient booking.",
+        }
+
+    def clean_employee_id(self):
+        emp_id = (self.cleaned_data.get("employee_id") or "").strip().upper()
+        if not emp_id:
+            raise forms.ValidationError("Employee ID is required.")
+        qs = StaffProfile.objects.filter(employee_id__iexact=emp_id)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Staff profile with Employee ID '{emp_id}' already exists.")
+        return emp_id
