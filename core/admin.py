@@ -880,6 +880,8 @@ class PriceAdmin(admin.ModelAdmin):
         return str(obj.item) if obj.item else f"{obj.price_type}:{obj.object_id}"
     target_item.short_description = "Target Item"
 
+    readonly_fields = ("approved_by", "approved_at", "created_by")
+
     fieldsets = (
         (
             "Price Target & Scope",
@@ -905,8 +907,81 @@ class PriceAdmin(admin.ModelAdmin):
         (
             "Governance & Status",
             {
-                "fields": ("status", "is_active", "notes"),
-                "description": "Lifecycle state and administrative remarks.",
+                "fields": ("status", "is_active", "notes", "created_by", "approved_by", "approved_at"),
+                "description": "Lifecycle state, audit trail, and administrative remarks.",
             },
         ),
     )
+
+    def save_model(self, request, obj, form, change):
+        actor_profile = StaffProfile.objects.filter(user=request.user).first()
+        is_approval_action = obj.status in (Price.Status.APPROVED, Price.Status.REJECTED)
+        status_changed = "status" in form.changed_data
+
+        if not change:
+            if not obj.created_by:
+                obj.created_by = request.user
+            # If creating directly as approved or rejected
+            if is_approval_action:
+                if not request.user.has_perm("core.approve_price"):
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied("You do not have permission to approve or reject prices.")
+                obj.approved_by = request.user
+                obj.approved_at = timezone.now()
+        else:
+            old_obj = Price.objects.get(pk=obj.pk)
+            # Check permission if changing status to APPROVED / REJECTED or activating
+            if status_changed and is_approval_action:
+                if not request.user.has_perm("core.approve_price"):
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied("You do not have permission to approve or reject prices.")
+                # Separation of duties: creator cannot approve their own price if they are the creator
+                if obj.created_by_id and obj.created_by_id == request.user.pk:
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied("Separation of duties violation: Creators cannot approve their own prices.")
+                obj.approved_by = request.user
+                obj.approved_at = timezone.now()
+            elif status_changed and obj.status not in (Price.Status.APPROVED, Price.Status.REJECTED):
+                # Reset approver if moved back to draft or pending
+                obj.approved_by = None
+                obj.approved_at = None
+
+        super().save_model(request, obj, form, change)
+
+        # AuditEvent logging
+        if not change:
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action="price.created",
+                target_type="price",
+                target_id=str(obj.pk),
+                details={
+                    "price_type": obj.price_type,
+                    "target": str(obj.item) if obj.item else str(obj.object_id),
+                    "amount": str(obj.amount),
+                    "currency": obj.currency,
+                    "status": obj.status,
+                    "is_active": obj.is_active,
+                },
+            )
+        else:
+            action_name = "price.updated"
+            if status_changed:
+                if obj.status == Price.Status.APPROVED:
+                    action_name = "price.approved"
+                elif obj.status == Price.Status.REJECTED:
+                    action_name = "price.rejected"
+
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action=action_name,
+                target_type="price",
+                target_id=str(obj.pk),
+                details={
+                    "changed_fields": form.changed_data,
+                    "status": obj.status,
+                    "amount": str(obj.amount),
+                    "is_active": obj.is_active,
+                    "approved_by": str(obj.approved_by) if obj.approved_by else None,
+                },
+            )

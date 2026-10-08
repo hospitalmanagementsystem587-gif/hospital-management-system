@@ -1745,6 +1745,11 @@ class Price(TimestampedModel):
             from django.core.exceptions import ValidationError
             raise ValidationError({"effective_until": "Effective until date must be on or after effective from date."})
 
+        # Unapproved prices cannot be active
+        if self.is_active and self.status != self.Status.APPROVED:
+            from django.core.exceptions import ValidationError
+            raise ValidationError({"is_active": "Only approved prices can be marked as active."})
+
         # Prevent overlapping active versions for the same item/price_type and scope
         if self.is_active and self.content_type_id and self.object_id:
             qs = Price.objects.filter(
