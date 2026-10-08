@@ -1379,6 +1379,13 @@ class Ward(TimestampedModel):
     def __str__(self):
         return f"{self.name} ({self.get_category_display()})"
 
+    def get_current_price(self, as_of=None, scope="standard"):
+        """Resolves the current canonical daily rate for this ward, falling back to legacy daily_rate."""
+        price = Price.get_current_price(self, scope=scope, as_of=as_of, price_type=Price.PriceType.WARD)
+        if price:
+            return price.amount
+        return self.daily_rate if self.daily_rate is not None else Decimal("0.00")
+
 
 class Bed(TimestampedModel):
     class Status(models.TextChoices):
@@ -1457,7 +1464,10 @@ class Admission(TimestampedModel):
 
     @property
     def estimated_bed_charges(self):
-        return Decimal(self.total_days_stayed) * self.bed.ward.daily_rate
+        # Resolve daily rate as of admission date to protect historical billing from post-admission rate changes
+        as_of_date = self.admitted_at.date() if self.admitted_at else timezone.localdate()
+        daily_rate = self.bed.ward.get_current_price(as_of=as_of_date)
+        return Decimal(self.total_days_stayed) * daily_rate
 
     @property
     def net_balance(self):
