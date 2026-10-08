@@ -1432,6 +1432,14 @@ class Admission(TimestampedModel):
         default=False, verbose_name="Medico-Legal Case (MLC)"
     )
     admitted_at = models.DateTimeField(default=timezone.now)
+    daily_rate_snapshot = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="Ward daily rate captured when the admission is created.",
+    )
     discharged_at = models.DateTimeField(null=True, blank=True)
     discharge_summary = models.TextField(blank=True)
     discharge_condition = models.CharField(max_length=120, blank=True)
@@ -1449,6 +1457,12 @@ class Admission(TimestampedModel):
     def __str__(self):
         return f"IPD {self.admission_number} · {self.patient.full_name} ({self.bed.bed_number})"
 
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.daily_rate_snapshot is None and self.bed_id:
+            as_of = self.admitted_at.date() if self.admitted_at else timezone.localdate()
+            self.daily_rate_snapshot = self.bed.ward.get_current_price(as_of=as_of)
+        super().save(*args, **kwargs)
+
     @property
     def total_advance_deposited(self):
         return self.deposits.aggregate(total=models.Sum("amount"))["total"] or Decimal("0.00")
@@ -1464,9 +1478,10 @@ class Admission(TimestampedModel):
 
     @property
     def estimated_bed_charges(self):
-        # Resolve daily rate as of admission date to protect historical billing from post-admission rate changes
-        as_of_date = self.admitted_at.date() if self.admitted_at else timezone.localdate()
-        daily_rate = self.bed.ward.get_current_price(as_of=as_of_date)
+        daily_rate = self.daily_rate_snapshot
+        if daily_rate is None:
+            # Compatibility fallback for an unbackfilled legacy row.
+            daily_rate = self.bed.ward.daily_rate
         return Decimal(self.total_days_stayed) * daily_rate
 
     @property
@@ -1685,10 +1700,10 @@ class Price(TimestampedModel):
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
-        default=Status.APPROVED,
+        default=Status.DRAFT,
         db_index=True,
     )
-    is_active = models.BooleanField(default=True, db_index=True)
+    is_active = models.BooleanField(default=False, db_index=True)
 
     # Version tracking
     version = models.PositiveIntegerField(default=1)
@@ -1727,6 +1742,14 @@ class Price(TimestampedModel):
                 condition=Q(effective_until__isnull=True) | Q(effective_until__gte=models.F("effective_from")),
                 name="canonical_price_dates_valid",
             ),
+            models.CheckConstraint(
+                condition=Q(is_active=False) | Q(status="approved"),
+                name="canonical_price_active_approved",
+            ),
+            models.UniqueConstraint(
+                fields=["content_type", "object_id", "price_type", "scope", "version"],
+                name="canonical_price_item_scope_version_unique",
+            ),
         ]
         permissions = [
             ("approve_price", "Can approve, reject, or activate canonical prices"),
@@ -1738,16 +1761,39 @@ class Price(TimestampedModel):
 
     def clean(self):
         super().clean()
+        from django.core.exceptions import ValidationError
+
+        self.scope = (self.scope or "standard").strip().lower()
+        self.currency = (self.currency or "").strip().upper()
+        if len(self.currency) != 3 or not self.currency.isalpha():
+            raise ValidationError({"currency": "Currency must be a 3-letter alphabetic code."})
+
+        if bool(self.content_type_id) != bool(self.object_id):
+            raise ValidationError({"content_type": "Content type and object ID must be provided together."})
+        if self.price_type != self.PriceType.CUSTOM and not self.content_type_id:
+            raise ValidationError({"content_type": "A target item is required for this price type."})
+        if self.content_type_id and self.object_id:
+            model_class = self.content_type.model_class()
+            allowed_targets = {
+                self.PriceType.CONSULTATION: (StaffProfile, Specialty),
+                self.PriceType.SERVICE: (Service,),
+                self.PriceType.DIAGNOSTIC: (DiagnosticTest,),
+                self.PriceType.WARD: (Ward,),
+                self.PriceType.PACKAGE: (HealthPackage,),
+            }
+            allowed = allowed_targets.get(self.price_type)
+            if allowed and (model_class is None or not issubclass(model_class, allowed)):
+                raise ValidationError({"content_type": "The selected target is not valid for this price type."})
+            if model_class is None or not model_class._default_manager.filter(pk=self.object_id).exists():
+                raise ValidationError({"object_id": "The selected pricing target does not exist."})
+
         if self.amount is not None and self.amount < 0:
-            from django.core.exceptions import ValidationError
             raise ValidationError({"amount": "Price amount cannot be negative."})
         if self.effective_from and self.effective_until and self.effective_until < self.effective_from:
-            from django.core.exceptions import ValidationError
             raise ValidationError({"effective_until": "Effective until date must be on or after effective from date."})
 
         # Unapproved prices cannot be active
         if self.is_active and self.status != self.Status.APPROVED:
-            from django.core.exceptions import ValidationError
             raise ValidationError({"is_active": "Only approved prices can be marked as active."})
 
         # Prevent overlapping active versions for the same item/price_type and scope

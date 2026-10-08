@@ -107,7 +107,7 @@ class InvoicePriceSnapshotsTests(TestCase):
         p1.effective_until = self.today - timedelta(days=1)
         p1.save()
 
-        p2 = Price.objects.create(
+        Price.objects.create(
             price_type=Price.PriceType.SERVICE,
             item=self.service,
             amount=Decimal("2200.00"),
@@ -115,19 +115,46 @@ class InvoicePriceSnapshotsTests(TestCase):
             effective_from=self.today,
             status=Price.Status.APPROVED,
             is_active=True,
+            version=2,
         )
 
-        # Also modify legacy service.current_charge
         self.service.current_charge = Decimal("2200.00")
         self.service.save()
 
-        # 4. Verify historical invoice and line are unchanged
         invoice.refresh_from_db()
         line.refresh_from_db()
         self.assertEqual(invoice.subtotal, Decimal("3000.00"))
         self.assertEqual(invoice.total, Decimal("3000.00"))
         self.assertEqual(line.unit_price, Decimal("1500.00"))
         self.assertEqual(line.line_total, Decimal("3000.00"))
+
+    def test_client_supplied_unit_price_cannot_override_catalog_snapshot(self):
+        """Invoice creation ignores a tampered client price and snapshots the server price."""
+        Price.objects.create(
+            price_type=Price.PriceType.SERVICE,
+            item=self.service,
+            amount=Decimal("1500.00"),
+            currency="INR",
+            effective_from=self.today - timedelta(days=1),
+            status=Price.Status.APPROVED,
+            is_active=True,
+        )
+        self.client.force_login(self.reception_user)
+
+        response = self.client.post(
+            "/invoices/create/",
+            data={
+                "patient": self.patient.pk,
+                "service": self.service.pk,
+                "quantity": "1",
+                "unit_price": "1.00",
+            },
+            HTTP_HOST="staff.hms.test",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        line = InvoiceLine.objects.get(invoice__patient=self.patient)
+        self.assertEqual(line.unit_price, Decimal("1500.00"))
 
     def test_payment_and_refund_workflows_reference_snapshotted_amounts(self):
         """Payment and refund operations strictly respect snapshotted invoice totals after price changes."""

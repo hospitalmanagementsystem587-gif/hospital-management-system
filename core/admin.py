@@ -917,27 +917,37 @@ class PriceAdmin(admin.ModelAdmin):
         actor_profile = StaffProfile.objects.filter(user=request.user).first()
         is_approval_action = obj.status in (Price.Status.APPROVED, Price.Status.REJECTED)
         status_changed = "status" in form.changed_data
+        old_obj = Price.objects.get(pk=obj.pk) if change else None
 
         if not change:
-            if not obj.created_by:
-                obj.created_by = request.user
-            # If creating directly as approved or rejected
+            obj.created_by = request.user
             if is_approval_action:
-                if not request.user.has_perm("core.approve_price"):
-                    from django.core.exceptions import PermissionDenied
-                    raise PermissionDenied("You do not have permission to approve or reject prices.")
-                obj.approved_by = request.user
-                obj.approved_at = timezone.now()
+                raise PermissionDenied(
+                    "New prices must be saved as draft or pending and approved by a different user."
+                )
         else:
-            old_obj = Price.objects.get(pk=obj.pk)
-            # Check permission if changing status to APPROVED / REJECTED or activating
+            activation_changed = old_obj.is_active != obj.is_active
+            if activation_changed and not request.user.has_perm("core.approve_price"):
+                raise PermissionDenied("Price activation changes require approval permission.")
+
+            immutable_after_approval = {
+                "price_type",
+                "content_type",
+                "object_id",
+                "scope",
+                "amount",
+                "currency",
+                "effective_from",
+                "effective_until",
+                "version",
+            }
+            if old_obj.status == Price.Status.APPROVED and immutable_after_approval.intersection(form.changed_data):
+                raise PermissionDenied("Approved price terms are immutable; create a new version instead.")
+
             if status_changed and is_approval_action:
                 if not request.user.has_perm("core.approve_price"):
-                    from django.core.exceptions import PermissionDenied
                     raise PermissionDenied("You do not have permission to approve or reject prices.")
-                # Separation of duties: creator cannot approve their own price if they are the creator
                 if obj.created_by_id and obj.created_by_id == request.user.pk:
-                    from django.core.exceptions import PermissionDenied
                     raise PermissionDenied("Separation of duties violation: Creators cannot approve their own prices.")
                 obj.approved_by = request.user
                 obj.approved_at = timezone.now()
@@ -979,6 +989,8 @@ class PriceAdmin(admin.ModelAdmin):
                 target_id=str(obj.pk),
                 details={
                     "changed_fields": form.changed_data,
+                    "previous_status": old_obj.status,
+                    "previous_is_active": old_obj.is_active,
                     "status": obj.status,
                     "amount": str(obj.amount),
                     "is_active": obj.is_active,

@@ -204,3 +204,62 @@ class PriceApprovalAuditTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             p.clean()
         self.assertIn("is_active", ctx.exception.message_dict)
+
+    def test_creator_cannot_create_an_already_approved_price(self):
+        """Even an approver must create a draft/pending record for another user to approve."""
+        self.client.force_login(self.admin_user)
+        response = self.client.post(
+            "/admin/core/price/add/",
+            data={
+                "price_type": Price.PriceType.SERVICE,
+                "content_type": ContentType.objects.get_for_model(Service).pk,
+                "object_id": self.service.pk,
+                "scope": "standard",
+                "version": 1,
+                "amount": "900.00",
+                "currency": "INR",
+                "effective_from": str(self.today),
+                "status": Price.Status.APPROVED,
+                "is_active": "on",
+                "_save": "Save",
+            },
+            HTTP_HOST="admin.hms.test",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Price.objects.filter(amount=Decimal("900.00")).exists())
+
+    def test_editor_cannot_activate_an_approved_price(self):
+        """Changing activation is an approval operation, even without a status transition."""
+        price = Price.objects.create(
+            price_type=Price.PriceType.SERVICE,
+            item=self.service,
+            amount=Decimal("910.00"),
+            currency="INR",
+            effective_from=self.today,
+            status=Price.Status.APPROVED,
+            is_active=False,
+            created_by=self.admin_user,
+            approved_by=self.approver_user,
+            approved_at=timezone.now(),
+        )
+        self.client.force_login(self.editor_user)
+        response = self.client.post(
+            f"/admin/core/price/{price.pk}/change/",
+            data={
+                "price_type": price.price_type,
+                "content_type": price.content_type_id,
+                "object_id": price.object_id,
+                "scope": price.scope,
+                "version": price.version,
+                "amount": str(price.amount),
+                "currency": price.currency,
+                "effective_from": str(price.effective_from),
+                "status": price.status,
+                "is_active": "on",
+                "_save": "Save",
+            },
+            HTTP_HOST="admin.hms.test",
+        )
+        self.assertEqual(response.status_code, 403)
+        price.refresh_from_db()
+        self.assertFalse(price.is_active)

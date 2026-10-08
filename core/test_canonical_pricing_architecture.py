@@ -103,8 +103,8 @@ class CanonicalPricingArchitectureTests(TestCase):
         response = self.client.get("/admin/core/price/", HTTP_HOST="admin.hms.test")
         self.assertEqual(response.status_code, 403)
 
-    def test_admin_can_create_canonical_price_for_doctor_consultation(self):
-        """Admin can configure canonical pricing for doctor consultation via admin form."""
+    def test_admin_can_submit_canonical_price_for_approval(self):
+        """A creator can submit a consultation price but cannot self-approve it."""
         self.client.force_login(self.admin_user)
         doc_ct = ContentType.objects.get_for_model(self.doctor_profile)
         post_data = {
@@ -115,8 +115,7 @@ class CanonicalPricingArchitectureTests(TestCase):
             "amount": "850.00",
             "currency": "INR",
             "effective_from": date.today().isoformat(),
-            "status": Price.Status.APPROVED,
-            "is_active": "on",
+            "status": Price.Status.PENDING_APPROVAL,
             "version": 1,
             "notes": "Revised standard specialist OPD fee.",
         }
@@ -134,7 +133,9 @@ class CanonicalPricingArchitectureTests(TestCase):
         )
         self.assertEqual(created.amount, Decimal("850.00"))
         self.assertEqual(created.currency, "INR")
-        self.assertTrue(created.is_active)
+        self.assertFalse(created.is_active)
+        self.assertEqual(created.created_by, self.admin_user)
+        self.assertIsNone(created.approved_by)
 
     def test_get_current_price_resolves_approved_active_price(self):
         """get_current_price classmethod accurately resolves the active canonical price."""
@@ -154,7 +155,7 @@ class CanonicalPricingArchitectureTests(TestCase):
             currency="INR",
             effective_from=date.today(),
             status=Price.Status.DRAFT,
-            is_active=True,
+            is_active=False,
         )
         resolved = Price.get_current_price(self.service, scope="special_promo")
         self.assertIsNone(resolved)
@@ -187,3 +188,35 @@ class CanonicalPricingArchitectureTests(TestCase):
         })
         self.assertFalse(form.is_valid())
         self.assertIn("effective_until", form.errors)
+
+    def test_price_form_rejects_mismatched_target_type(self):
+        """A service price cannot point at an unrelated doctor profile."""
+        form = PriceForm(data={
+            "price_type": Price.PriceType.SERVICE,
+            "content_type": ContentType.objects.get_for_model(self.doctor_profile).pk,
+            "object_id": self.doctor_profile.pk,
+            "scope": "standard",
+            "amount": "100.00",
+            "currency": "INR",
+            "effective_from": date.today(),
+            "status": Price.Status.DRAFT,
+            "version": 1,
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("content_type", form.errors)
+
+    def test_price_form_normalizes_currency_and_scope(self):
+        form = PriceForm(data={
+            "price_type": Price.PriceType.SERVICE,
+            "content_type": self.srv_ct.pk,
+            "object_id": self.service.pk,
+            "scope": " Standard ",
+            "amount": "100.00",
+            "currency": "inr",
+            "effective_from": date.today() + timedelta(days=100),
+            "status": Price.Status.DRAFT,
+            "version": 2,
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.instance.currency, "INR")
+        self.assertEqual(form.instance.scope, "standard")

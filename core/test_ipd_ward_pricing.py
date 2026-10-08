@@ -78,6 +78,7 @@ class IPDWardPricingTests(TestCase):
             effective_until=self.today - timedelta(days=1),
             status=Price.Status.APPROVED,
             is_active=True,
+            version=1,
         )
         # Current price: 3500
         Price.objects.create(
@@ -89,6 +90,7 @@ class IPDWardPricingTests(TestCase):
             effective_until=future_date - timedelta(days=1),
             status=Price.Status.APPROVED,
             is_active=True,
+            version=2,
         )
         # Future price: 4200
         Price.objects.create(
@@ -99,6 +101,7 @@ class IPDWardPricingTests(TestCase):
             effective_from=future_date,
             status=Price.Status.APPROVED,
             is_active=True,
+            version=3,
         )
 
         self.assertEqual(self.ward.get_current_price(as_of=past_date + timedelta(days=10)), Decimal("2800.00"))
@@ -118,6 +121,7 @@ class IPDWardPricingTests(TestCase):
             effective_until=self.today - timedelta(days=1),
             status=Price.Status.APPROVED,
             is_active=True,
+            version=2,
         )
         # Current rate 4000 starting today
         Price.objects.create(
@@ -198,3 +202,33 @@ class IPDWardPricingTests(TestCase):
         self.assertEqual(line.unit_price, Decimal("2500.00"))
         self.assertEqual(line.line_total, Decimal("7500.00"))
         self.assertEqual(invoice.total, Decimal("7500.00"))
+
+    def test_retroactive_price_cannot_change_admission_rate_snapshot(self):
+        """A later price inserted with a past effective date cannot rewrite an admission rate."""
+        admission_time = timezone.make_aware(datetime.combine(self.today - timedelta(days=10), time(9, 0)))
+        adm = Admission.objects.create(
+            admission_number="ADM-IPD-SNAPSHOT",
+            patient=self.patient,
+            bed=self.bed,
+            admitting_doctor=self.doctor,
+            status=Admission.Status.DISCHARGED,
+            admission_reason="Snapshot verification",
+            admitted_at=admission_time,
+            discharged_at=admission_time + timedelta(days=2),
+        )
+        self.assertEqual(adm.daily_rate_snapshot, Decimal("2500.00"))
+        original = adm.estimated_bed_charges
+
+        Price.objects.create(
+            price_type=Price.PriceType.WARD,
+            item=self.ward,
+            amount=Decimal("9000.00"),
+            currency="INR",
+            effective_from=self.today - timedelta(days=30),
+            effective_until=self.today - timedelta(days=5),
+            status=Price.Status.APPROVED,
+            is_active=True,
+        )
+
+        adm.refresh_from_db()
+        self.assertEqual(adm.estimated_bed_charges, original)

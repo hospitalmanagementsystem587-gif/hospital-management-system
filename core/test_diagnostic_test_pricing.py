@@ -72,6 +72,7 @@ class DiagnosticTestPricingTests(TestCase):
             effective_until=self.today - timedelta(days=1),
             status=Price.Status.APPROVED,
             is_active=True,
+            version=1,
         )
         # Current price: 450
         Price.objects.create(
@@ -83,6 +84,7 @@ class DiagnosticTestPricingTests(TestCase):
             effective_until=future_date - timedelta(days=1),
             status=Price.Status.APPROVED,
             is_active=True,
+            version=2,
         )
         # Future scheduled price: 550
         Price.objects.create(
@@ -93,6 +95,7 @@ class DiagnosticTestPricingTests(TestCase):
             effective_from=future_date,
             status=Price.Status.APPROVED,
             is_active=True,
+            version=3,
         )
 
         self.assertEqual(self.test_cbc.get_current_price(as_of=past_date + timedelta(days=5)), Decimal("350.00"))
@@ -109,6 +112,7 @@ class DiagnosticTestPricingTests(TestCase):
             effective_from=self.today,
             status=Price.Status.APPROVED,
             is_active=True,
+            version=2,
         )
         self.assertEqual(p.currency, "INR")
         self.assertEqual(self.test_cbc.get_current_price(as_of=self.today), Decimal("450.00"))
@@ -126,7 +130,7 @@ class DiagnosticTestPricingTests(TestCase):
             currency="INR",
             effective_from=self.today,
             status=Price.Status.PENDING_APPROVAL,
-            is_active=True,
+            is_active=False,
         )
         self.assertIsNone(self.test_cbc.get_current_price(as_of=self.today))
 
@@ -165,6 +169,7 @@ class DiagnosticTestPricingTests(TestCase):
             effective_from=self.today,
             status=Price.Status.APPROVED,
             is_active=True,
+            version=2,
         )
 
         # Historical invoice line and total remain intact

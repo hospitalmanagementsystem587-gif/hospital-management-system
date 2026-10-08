@@ -61,7 +61,7 @@ class ServicePricingTests(TestCase):
             code="SRV-PHYSIO",
             name="Physiotherapy Session",
             current_charge=Decimal("400.00"),
-            is_active=True,
+            is_active=False,
         )
 
     def test_fallback_to_current_charge_when_no_canonical_price_exists(self):
@@ -107,6 +107,7 @@ class ServicePricingTests(TestCase):
             effective_until=future_date - timedelta(days=1),
             status=Price.Status.APPROVED,
             is_active=True,
+            version=2,
         )
         # Future price: 900
         p_future = Price.objects.create(
@@ -117,6 +118,7 @@ class ServicePricingTests(TestCase):
             effective_from=future_date,
             status=Price.Status.APPROVED,
             is_active=True,
+            version=3,
         )
 
         self.assertEqual(self.service.get_current_price(as_of=past_date + timedelta(days=5)), Decimal("500.00"))
@@ -132,7 +134,7 @@ class ServicePricingTests(TestCase):
             currency="INR",
             effective_from=self.today - timedelta(days=5),
             status=Price.Status.PENDING_APPROVAL,
-            is_active=True,
+            is_active=False,
         )
         # Should fallback to current_charge since canonical price is not approved
         self.assertEqual(self.service.get_current_price(as_of=self.today), Decimal("400.00"))
@@ -145,6 +147,7 @@ class ServicePricingTests(TestCase):
             effective_from=self.today - timedelta(days=5),
             status=Price.Status.APPROVED,
             is_active=False,  # deactivated
+            version=2,
         )
         self.assertEqual(self.service.get_current_price(as_of=self.today), Decimal("400.00"))
 
@@ -215,6 +218,7 @@ class ServicePricingTests(TestCase):
             effective_from=self.today,
             status=Price.Status.APPROVED,
             is_active=True,
+            version=2,
         )
 
         # Historical invoice line must remain 550
