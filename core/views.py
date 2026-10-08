@@ -141,6 +141,8 @@ def home(request):
             ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
 
         if is_doctor:
+            context["doctor_today_appointments"] = 0
+            context["doctor_waiting_patients"] = 0
             doctor_profile = StaffProfile.objects.filter(user=user).first()
             if doctor_profile:
                 context["doctor_today_appointments"] = Appointment.objects.filter(
