@@ -310,6 +310,13 @@ class Service(TimestampedModel):
     def __str__(self):
         return f"{self.name} ({self.code})"
 
+    def get_current_price(self, as_of=None, scope="standard"):
+        """Resolves the current canonical Price for this service, falling back to legacy current_charge."""
+        price = Price.get_current_price(self, scope=scope, as_of=as_of, price_type=Price.PriceType.SERVICE)
+        if price:
+            return price.amount
+        return self.current_charge if self.current_charge is not None else Decimal("0.00")
+
 
 class DiagnosticTest(TimestampedModel):
     class Category(models.TextChoices):

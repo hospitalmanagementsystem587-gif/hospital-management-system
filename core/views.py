@@ -251,9 +251,9 @@ def invoice_create(request):
     service = get_object_or_404(Service, pk=request.POST.get("service"))
     try:
         quantity = Decimal(request.POST.get("quantity", "1"))
-        unit_price = Decimal(
-            request.POST.get("unit_price", service.current_charge or 0)
-        )
+        default_unit_price = service.get_current_price()
+        raw_unit_price = request.POST.get("unit_price")
+        unit_price = Decimal(raw_unit_price) if raw_unit_price not in (None, "") else default_unit_price
         discount = Decimal(request.POST.get("discount_amount", "0.00"))
     except InvalidOperation:
         return HttpResponseBadRequest("Invoice amounts must be valid numbers.")
