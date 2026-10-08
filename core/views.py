@@ -797,6 +797,13 @@ def patient_document_download(request, patient_pk, public_id):
     except FileNotFoundError:
         raise Http404("Document not found")
 
+    _audit_patient_change(
+        request,
+        patient,
+        "patient.document_downloaded",
+        [f"doc_type:{document.document_type}", f"public_id:{document.public_id}"],
+    )
+
     response = FileResponse(
         file_handle,
         as_attachment=True,
