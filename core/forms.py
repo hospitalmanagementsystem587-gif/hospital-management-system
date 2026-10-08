@@ -18,6 +18,7 @@ from .models import (
     PaymentMethod,
     Prescription,
     PrescriptionItem,
+    Specialty,
     StaffProfile,
     VisitType,
 )
@@ -502,6 +503,62 @@ class DepartmentForm(forms.ModelForm):
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
             raise forms.ValidationError(f"Department with name '{name}' already exists.")
+        return name
+
+    def clean_icon_name(self):
+        icon = (self.cleaned_data.get("icon_name") or "").strip()
+        return icon or "medical_services"
+
+
+class SpecialtyForm(forms.ModelForm):
+    """Administrator CMS form for creating and managing medical specialties."""
+
+    class Meta:
+        model = Specialty
+        fields = (
+            "code",
+            "name",
+            "description",
+            "icon_name",
+            "display_order",
+            "is_active",
+        )
+        widgets = {
+            "code": forms.TextInput(attrs={"placeholder": "e.g. CARDIO", "class": "vTextField"}),
+            "name": forms.TextInput(attrs={"placeholder": "e.g. Cardiology", "class": "vTextField"}),
+            "description": forms.Textarea(attrs={"rows": 3, "placeholder": "Clinical focus and sub-specialty scope...", "class": "vLargeTextField"}),
+            "icon_name": forms.TextInput(attrs={"placeholder": "e.g. medical_services", "class": "vTextField"}),
+            "display_order": forms.NumberInput(attrs={"class": "vIntegerField"}),
+        }
+        help_texts = {
+            "code": "Unique alphanumeric system code (uppercase recommended, e.g. CARDIO, NEURO).",
+            "name": "Public and clinical display name of the medical specialty.",
+            "description": "Optional clinical description shown on public directories and doctor profiles.",
+            "icon_name": "Material / UI icon identifier for portal navigation.",
+            "display_order": "Sorting priority across navigation listings and directories (lower numbers appear first).",
+            "is_active": "Controls whether this specialty is active for doctor assignments and public visibility.",
+        }
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip().upper()
+        if not code:
+            raise forms.ValidationError("Specialty code is required.")
+        qs = Specialty.objects.filter(code__iexact=code)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Specialty with code '{code}' already exists.")
+        return code
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if not name:
+            raise forms.ValidationError("Specialty name is required.")
+        qs = Specialty.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Specialty with name '{name}' already exists.")
         return name
 
     def clean_icon_name(self):

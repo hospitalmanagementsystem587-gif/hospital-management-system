@@ -30,6 +30,23 @@ class Department(TimestampedModel):
         return self.name
 
 
+class Specialty(TimestampedModel):
+    code = models.CharField(max_length=32, unique=True, db_index=True)
+    name = models.CharField(max_length=120, unique=True, db_index=True)
+    description = models.TextField(blank=True)
+    icon_name = models.CharField(max_length=40, default="medical_services", blank=True)
+    display_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        verbose_name = "Specialty"
+        verbose_name_plural = "Specialties"
+
+    def __str__(self):
+        return self.name
+
+
 class StaffProfile(TimestampedModel):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,

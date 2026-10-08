@@ -9,7 +9,7 @@ from django.db.models import Sum
 from django.shortcuts import redirect
 from django.utils import timezone
 
-from .forms import DepartmentForm, HospitalSettingsForm
+from .forms import DepartmentForm, HospitalSettingsForm, SpecialtyForm
 from .models import (
     Admission,
     Appointment,
@@ -31,6 +31,7 @@ from .models import (
     Prescription,
     Refund,
     Service,
+    Specialty,
     StaffProfile,
     Supplier,
     VisitType,
@@ -244,6 +245,32 @@ class DepartmentAdmin(admin.ModelAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
+
+@admin.register(Specialty)
+class SpecialtyAdmin(admin.ModelAdmin):
+    form = SpecialtyForm
+    list_display = ("code", "name", "display_order", "is_active", "updated_at")
+    list_editable = ("display_order", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name", "description")
+    ordering = ("display_order", "name")
+
+    fieldsets = (
+        (
+            "Specialty Information",
+            {
+                "fields": ("code", "name", "description"),
+                "description": "Medical specialty identity. Code is used for routing, reporting, and doctor specialization.",
+            },
+        ),
+        (
+            "Display & Availability",
+            {
+                "fields": ("icon_name", "display_order", "is_active"),
+                "description": "Controls display order and availability for doctor profiles and directory publishing.",
+            },
+        ),
+    )
 
 
 @admin.register(VisitType)
