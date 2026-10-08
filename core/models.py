@@ -375,6 +375,13 @@ class DiagnosticTest(TimestampedModel):
     def __str__(self):
         return f"{self.name} ({self.code})"
 
+    def get_current_price(self, as_of=None, scope="standard"):
+        """Resolves the current canonical Price for this diagnostic test."""
+        price = Price.get_current_price(self, scope=scope, as_of=as_of, price_type=Price.PriceType.DIAGNOSTIC)
+        if price:
+            return price.amount
+        return None
+
 
 class HealthPackage(TimestampedModel):
     """A governed, publishable bundle of services with a price snapshot."""
