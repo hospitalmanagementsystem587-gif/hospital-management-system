@@ -5,6 +5,8 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import redirect
 from django.urls import set_urlconf
 
+from core.authorization import PORTAL_ALLOWED_GROUPS, user_can_access_portal
+
 
 @dataclass(frozen=True)
 class PortalDefinition:
@@ -14,20 +16,13 @@ class PortalDefinition:
 
 
 PORTALS = {
-    "admin": PortalDefinition("config.urls_admin", frozenset()),
-    "staff": PortalDefinition(
-        "config.urls_staff",
-        frozenset({"Administrator", "Doctor", "Reception", "Pharmacy"}),
-    ),
-    "store": PortalDefinition(
-        "config.urls_store", frozenset({"Administrator", "Pharmacy"})
-    ),
+    "admin": PortalDefinition("config.urls_admin", PORTAL_ALLOWED_GROUPS["admin"]),
+    "staff": PortalDefinition("config.urls_staff", PORTAL_ALLOWED_GROUPS["staff"]),
+    "store": PortalDefinition("config.urls_store", PORTAL_ALLOWED_GROUPS["store"]),
     "patient": PortalDefinition(
-        "config.urls_patient", frozenset(), patient_only=True
+        "config.urls_patient", PORTAL_ALLOWED_GROUPS["patient"], patient_only=True
     ),
-    # There is no support-agent role in the current authorization model. Keep
-    # this future portal administrator-only until its dedicated role ticket.
-    "agent": PortalDefinition("config.urls_agent", frozenset({"Administrator"})),
+    "agent": PortalDefinition("config.urls_agent", PORTAL_ALLOWED_GROUPS["agent"]),
 }
 
 
@@ -41,27 +36,6 @@ def portal_for_host(host):
             return portal
     return None
 
-
-def user_can_access_portal(user, portal):
-    if user.is_superuser:
-        return True
-
-    definition = PORTALS[portal]
-    if portal == "admin":
-        # Django admin independently requires is_staff; enforce the same gate
-        # at the host boundary instead of implying that group membership alone
-        # grants CMS access.
-        return user.is_staff
-
-    if definition.patient_only:
-        account = getattr(user, "patient_account", None)
-        return bool(
-            account
-            and account.is_verified
-            and account.patient.archived_at is None
-        )
-
-    return user.groups.filter(name__in=definition.groups).exists()
 
 
 class PortalRoutingMiddleware:

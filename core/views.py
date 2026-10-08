@@ -15,7 +15,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
-from .authorization import doctor_patient_queryset
+from .authorization import (
+    doctor_patient_queryset,
+    get_authorized_appointment_queryset,
+    get_authorized_patient_queryset,
+)
 from .forms import (
     AdmissionForm,
     AppointmentForm,

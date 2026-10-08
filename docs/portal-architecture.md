@@ -55,3 +55,21 @@ debugging.
 - **Session expiry:** Configurable via `DJANGO_SESSION_COOKIE_AGE` (defaults to 28,800s / 8h), expiring at browser close (`SESSION_EXPIRE_AT_BROWSER_CLOSE = True`).
 - **Cookie & Subdomain Policy:** Cookies use `HttpOnly`, `SameSite=Lax`, and `Secure` when `DEBUG=False`. Cookie domains are configurable via `DJANGO_SESSION_COOKIE_DOMAIN` and `DJANGO_CSRF_COOKIE_DOMAIN` (e.g. `.example.com` for cross-subdomain single sign-on across `*.example.com`, or omitted/None for strict host-only session isolation).
 - **Portal Context:** `request.portal` is set by `PortalRoutingMiddleware` and passed down to templates via `core.context_processors.hospital_context`.
+
+## Portal-Aware Authorization & Role Mapping Matrix (KAN-37)
+
+- **Server-Side Enforcement:** Portal admission and object/record access are strictly enforced server-side. Navigation and templates are never treated as security controls.
+- **Portal Admission Policy:**
+  - `admin.{domain}`: Active superusers and active Django staff (`user.is_staff and user.is_active`).
+  - `staff.{domain}`: Active superusers and users belonging to `Administrator`, `Doctor`, `Reception`, or `Pharmacy` groups.
+  - `store.{domain}`: Active superusers and users belonging to `Administrator` or `Pharmacy` groups.
+  - `patient.{domain}`: Active users with a verified `PatientAccount` whose associated `Patient` record is not archived (`archived_at is None`), plus superusers.
+  - `agent.{domain}`: Fail-closed; restricted to active superusers and `Administrator` group until dedicated support-agent role is introduced.
+  - **Inactive & Anonymous:** Inactive users cannot authenticate and have session access revoked immediately. Anonymous users are redirected to `/accounts/login/` with safe `next` parameter preservation.
+- **Resource & Object Scopes:**
+  - **Patients:** Receptionists and Administrators access all non-archived patients; Doctors only access patients assigned via active appointments or consultations (`doctor_patient_queryset`); ordinary users and patients without staff roles cannot access staff patient directories.
+  - **Appointments:** Receptionists and Administrators access all appointments; Doctors access only their own assigned schedule.
+  - **Clinical Records & Prescriptions:** Consultations are scoped to the attending doctor; prescriptions are accessible only to the attending doctor and Pharmacy (when `ISSUED`). Unauthorized clinical accesses return non-disclosing HTTP 404s.
+  - **Documents & Downloads:** Download access requires verified patient ownership or authorized doctor/staff relationship. Quarantined, rejected, unreleased, or revoked documents return non-disclosing HTTP 404s.
+  - **Billing & Finance:** Invoices and payments are managed by Reception and Administrators. Patients can only query and view their own issued invoices via the API.
+  - **Two-Patient Isolation:** Two distinct patients can never view or download each other's data, invoices, or health documents across portals and API endpoints.
