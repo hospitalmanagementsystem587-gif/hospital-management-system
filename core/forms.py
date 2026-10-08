@@ -12,6 +12,7 @@ from .models import (
     Consultation,
     Department,
     DiagnosticTest,
+    HealthPackage,
     HospitalSettings,
     InpatientDeposit,
     Patient,
@@ -781,3 +782,68 @@ class DiagnosticTestForm(forms.ModelForm):
         if qs.exists():
             raise forms.ValidationError(f"Diagnostic test with name '{name}' already exists.")
         return name
+
+
+class HealthPackageForm(forms.ModelForm):
+    """Administrator CMS form for managing health packages and checkup bundles."""
+
+    class Meta:
+        model = HealthPackage
+        fields = (
+            "code",
+            "name",
+            "description",
+            "included_services",
+            "price",
+            "eligibility",
+            "fasting_instructions",
+            "valid_from",
+            "valid_until",
+            "is_published",
+        )
+        widgets = {
+            "code": forms.TextInput(attrs={"placeholder": "e.g. EXEC_HEALTH_MEN", "class": "vTextField"}),
+            "name": forms.TextInput(attrs={"placeholder": "e.g. Executive Comprehensive Health Checkup", "class": "vTextField"}),
+            "description": forms.Textarea(attrs={"rows": 3, "placeholder": "Clinical overview and scope of the package...", "class": "vLargeTextField"}),
+            "price": forms.NumberInput(attrs={"class": "vIntegerField", "min": 0, "step": "0.01"}),
+            "eligibility": forms.TextInput(attrs={"placeholder": "e.g. Adults aged 18-65 years", "class": "vTextField"}),
+            "fasting_instructions": forms.TextInput(attrs={"placeholder": "e.g. 10-12 hours overnight fasting required", "class": "vTextField"}),
+            "valid_from": forms.DateInput(attrs={"type": "date", "class": "vDateField"}),
+            "valid_until": forms.DateInput(attrs={"type": "date", "class": "vDateField"}),
+        }
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip().upper()
+        if not code:
+            raise forms.ValidationError("Package code is required.")
+        qs = HealthPackage.objects.filter(code__iexact=code)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Health package with code '{code}' already exists.")
+        return code
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if not name:
+            raise forms.ValidationError("Package name is required.")
+        qs = HealthPackage.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Health package with name '{name}' already exists.")
+        return name
+
+    def clean_price(self):
+        price = self.cleaned_data.get("price")
+        if price is not None and price < 0:
+            raise forms.ValidationError("Package price cannot be negative.")
+        return price
+
+    def clean(self):
+        cleaned_data = super().clean()
+        valid_from = cleaned_data.get("valid_from")
+        valid_until = cleaned_data.get("valid_until")
+        if valid_from and valid_until and valid_until < valid_from:
+            raise forms.ValidationError({"valid_until": "Validity end date must be on or after valid from date."})
+        return cleaned_data

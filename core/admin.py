@@ -13,6 +13,7 @@ from .forms import (
     DepartmentForm,
     DiagnosticTestForm,
     DoctorScheduleForm,
+    HealthPackageForm,
     HospitalSettingsForm,
     ServiceForm,
     SpecialtyForm,
@@ -508,10 +509,50 @@ class DiagnosticTestAdmin(admin.ModelAdmin):
 
 @admin.register(HealthPackage)
 class HealthPackageAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "price", "valid_from", "valid_until", "is_published")
+    form = HealthPackageForm
+    list_display = (
+        "code",
+        "name",
+        "price",
+        "services_count",
+        "valid_from",
+        "valid_until",
+        "is_published",
+        "updated_at",
+    )
+    list_editable = ("price", "is_published")
     list_filter = ("is_published", "valid_from", "valid_until")
-    search_fields = ("code", "name", "description")
+    search_fields = ("code", "name", "description", "eligibility")
     filter_horizontal = ("included_services",)
+    ordering = ("name",)
+
+    fieldsets = (
+        (
+            "Package Identity & Pricing",
+            {
+                "fields": ("code", "name", "price", "is_published"),
+                "description": "Standard identifier, public marketing title, and discounted composite package price.",
+            },
+        ),
+        (
+            "Clinical Scope & Included Services",
+            {
+                "fields": ("description", "included_services", "eligibility", "fasting_instructions"),
+                "description": "Covered clinical services, target demographic eligibility, and patient prep requirements.",
+            },
+        ),
+        (
+            "Validity & Campaign Schedule",
+            {
+                "fields": ("valid_from", "valid_until"),
+                "description": "Optional promotion start and expiry dates for seasonal health packages.",
+            },
+        ),
+    )
+
+    def services_count(self, obj):
+        return obj.included_services.count()
+    services_count.short_description = "Included Services"
 
 
 @admin.register(HealthContent)
