@@ -1,12 +1,16 @@
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
 
 from core import views
+from core.seo import public_sitemaps
 
 urlpatterns = [
     path("api/v1/", include("core.api.urls")),
     path("", views.home, name="home"),
     path("health/", views.health, name="health"),
+    path("robots.txt", views.robots_txt, name="robots_txt"),
+    path("sitemap.xml", sitemap, {"sitemaps": public_sitemaps}, name="sitemap"),
     path("accounts/login/", views.HospitalLoginView.as_view(), name="login"),
     path("patients/", views.patient_list, name="patient_list"),
     path("patients/register/", views.patient_create, name="patient_create"),
