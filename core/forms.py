@@ -11,6 +11,7 @@ from .models import (
     Bed,
     Consultation,
     Department,
+    DiagnosticTest,
     HospitalSettings,
     InpatientDeposit,
     Patient,
@@ -730,3 +731,53 @@ class ServiceForm(forms.ModelForm):
         if charge is not None and charge < 0:
             raise forms.ValidationError("Current charge cannot be negative.")
         return charge
+
+
+class DiagnosticTestForm(forms.ModelForm):
+    """Administrator CMS form for managing diagnostic laboratory and imaging tests."""
+
+    class Meta:
+        model = DiagnosticTest
+        fields = (
+            "code",
+            "name",
+            "category",
+            "department",
+            "description",
+            "preparation_instructions",
+            "sample_type",
+            "turnaround_time",
+            "display_order",
+            "is_active",
+        )
+        widgets = {
+            "code": forms.TextInput(attrs={"placeholder": "e.g. CBC or MRI_BRAIN", "class": "vTextField"}),
+            "name": forms.TextInput(attrs={"placeholder": "e.g. Complete Blood Count", "class": "vTextField"}),
+            "description": forms.Textarea(attrs={"rows": 3, "placeholder": "Clinical purpose and test parameters...", "class": "vLargeTextField"}),
+            "preparation_instructions": forms.Textarea(attrs={"rows": 2, "placeholder": "e.g. 10-12 hours fasting required...", "class": "vLargeTextField"}),
+            "sample_type": forms.TextInput(attrs={"placeholder": "e.g. EDTA Whole Blood, 3ml", "class": "vTextField"}),
+            "turnaround_time": forms.TextInput(attrs={"placeholder": "e.g. 4 hours or Same Day", "class": "vTextField"}),
+            "display_order": forms.NumberInput(attrs={"class": "vIntegerField"}),
+        }
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip().upper()
+        if not code:
+            raise forms.ValidationError("Diagnostic test code is required.")
+        qs = DiagnosticTest.objects.filter(code__iexact=code)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Diagnostic test with code '{code}' already exists.")
+        return code
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if not name:
+            raise forms.ValidationError("Diagnostic test name is required.")
+        qs = DiagnosticTest.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Diagnostic test with name '{name}' already exists.")
+        return name

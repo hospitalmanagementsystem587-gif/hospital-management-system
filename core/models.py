@@ -274,6 +274,64 @@ class Service(TimestampedModel):
         ]
 
 
+class DiagnosticTest(TimestampedModel):
+    class Category(models.TextChoices):
+        PATHOLOGY = "pathology", "Pathology / Laboratory"
+        RADIOLOGY = "radiology", "Radiology / Imaging"
+        CARDIOLOGY = "cardiology", "Cardiology Diagnostics"
+        NEUROLOGY = "neurology", "Neurology Diagnostics"
+        PULMONOLOGY = "pulmonology", "Pulmonology Diagnostics"
+        OTHER = "other", "Other Diagnostic"
+
+    code = models.CharField(max_length=32, unique=True, db_index=True)
+    name = models.CharField(max_length=160, unique=True, db_index=True)
+    category = models.CharField(
+        max_length=32,
+        choices=Category.choices,
+        default=Category.PATHOLOGY,
+        db_index=True,
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnostic_tests",
+    )
+    description = models.TextField(blank=True)
+    preparation_instructions = models.TextField(
+        blank=True,
+        help_text="Patient instructions (e.g. 10-12 hours fasting, withhold medications, etc.).",
+    )
+    sample_type = models.CharField(
+        max_length=80,
+        blank=True,
+        help_text="Specimen or modality required (e.g. Whole Blood, Serum, X-Ray, MRI).",
+    )
+    turnaround_time = models.CharField(
+        max_length=80,
+        blank=True,
+        help_text="Standard turnaround time (e.g. 2 hours, Same day, 24 hours).",
+    )
+    display_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Controls availability for ordering and public catalog listing.",
+    )
+
+    class Meta:
+        ordering = ["category", "display_order", "name"]
+        verbose_name = "Diagnostic Test"
+        verbose_name_plural = "Diagnostic Tests"
+        indexes = [
+            models.Index(fields=["category", "is_active"], name="diag_cat_active_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
 class HealthPackage(TimestampedModel):
     """A governed, publishable bundle of services with a price snapshot."""
 

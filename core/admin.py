@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from .forms import (
     DepartmentForm,
+    DiagnosticTestForm,
     DoctorScheduleForm,
     HospitalSettingsForm,
     ServiceForm,
@@ -22,6 +23,7 @@ from .models import (
     Appointment,
     Bed,
     Department,
+    DiagnosticTest,
     DoctorSchedule,
     DoctorSpecialty,
     HospitalFacility,
@@ -454,6 +456,54 @@ class ServiceAdmin(admin.ModelAdmin):
             if obj.invoiceline_set.exists() or obj.health_packages.exists():
                 return False
         return super().has_delete_permission(request, obj)
+
+
+@admin.register(DiagnosticTest)
+class DiagnosticTestAdmin(admin.ModelAdmin):
+    form = DiagnosticTestForm
+    list_display = (
+        "code",
+        "name",
+        "category",
+        "department",
+        "sample_type",
+        "turnaround_time",
+        "display_order",
+        "is_active",
+        "updated_at",
+    )
+    list_editable = ("display_order", "is_active")
+    list_filter = ("is_active", "category", "department")
+    search_fields = ("code", "name", "description", "sample_type")
+    ordering = ("category", "display_order", "name")
+
+    fieldsets = (
+        (
+            "Test Identification",
+            {
+                "fields": ("code", "name", "category", "department", "description"),
+                "description": "Clinical identification, specialty category, and assigned laboratory department.",
+            },
+        ),
+        (
+            "Clinical Protocol & Patient Instructions",
+            {
+                "fields": (
+                    "sample_type",
+                    "preparation_instructions",
+                    "turnaround_time",
+                ),
+                "description": "Specimen handling, fasting/prep requirements, and expected turnaround duration.",
+            },
+        ),
+        (
+            "Display & Catalog Availability",
+            {
+                "fields": ("display_order", "is_active"),
+                "description": "Listing sequence and active ordering status across public and staff portals.",
+            },
+        ),
+    )
 
 
 @admin.register(HealthPackage)
