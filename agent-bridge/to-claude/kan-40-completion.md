@@ -38,8 +38,9 @@ All authorization rules are enforced strictly server-side: only authenticated st
 |---|---|---|
 | `core/forms.py` | Modified | Added `HospitalSettingsForm` with custom cleaning and validation logic for `name`, `timezone` (via `zoneinfo`), `currency_code` (3-letter ISO), and contact numbers. |
 | `core/admin.py` | Modified | Updated `HospitalSettingsAdmin` to use `HospitalSettingsForm`, structured fieldsets, disabled delete permission, disabled duplicate add permission, and redirected `changelist_view` directly to singleton `change_view`. |
-| `config/urls_admin.py` | Modified | Included fallback legacy urlpatterns to ensure standard error templates (403, 404, 500) and shared route resolvers render correctly within the admin portal context. |
-| `core/test_hospital_profile_cms.py` | Created | Comprehensive unit and integration test suite (13 test cases) covering authorization, viewing, updating, validation errors, duplicate prevention, delete restrictions, XSS escaping, and public API compatibility. |
+| `config/urls_admin.py` | Modified | Added an admin-portal-specific 403 handler without importing staff-portal routes into the isolated admin URL configuration. |
+| `core/templates/admin/403.html` | Created | Added a minimal admin-safe permission-denied page whose links resolve entirely within the admin portal. |
+| `core/test_hospital_profile_cms.py` | Created | Comprehensive unit and integration test suite (14 test cases) covering authorization, viewing, updating, validation errors, duplicate prevention, delete restrictions, XSS escaping, and public API compatibility. |
 | `agent-bridge/to-claude/kan-40-completion.md` | Created | This completion report. |
 
 ---
@@ -56,7 +57,7 @@ All authorization rules are enforced strictly server-side: only authenticated st
 
 ### New Test Suite (`core/test_hospital_profile_cms.py`)
 Ran: `python manage.py test core.test_hospital_profile_cms -v 2`
-Result: **13/13 passed** in 4.24s.
+Result: **14/14 passed**.
 
 Tests included:
 1. `test_singleton_changelist_redirects_to_singleton_change_view`: Changelist redirects to `/admin/core/hospitalsettings/1/change/`.
@@ -72,10 +73,18 @@ Tests included:
 11. `test_cannot_add_duplicate_singleton`: Adding a duplicate profile is rejected with 403 Forbidden.
 12. `test_html_escaping_prevents_xss`: Malicious scripts in profile fields are escaped.
 13. `test_public_android_api_reflects_updated_profile`: `/api/v1/hospital-info/` returns updated profile fields.
+14. `test_staff_without_view_permission_cannot_use_singleton_redirect`: the singleton redirect remains protected by Django model permissions.
 
 ### Pre-Existing Test Suites Baseline (KAN-35 through KAN-39)
 Ran: `python manage.py test core.test_portal_architecture core.test_shared_auth_session core.test_portal_authorization core.test_design_system core.test_admin_dashboard -v 1`
 Result: **54/54 passed** in 5.34s.
+
+### Independent Integrated Verification (KAN-35 through KAN-40)
+Ran: `python manage.py test core.test_hospital_profile_cms core.test_portal_architecture core.test_shared_auth_session core.test_portal_authorization core.test_design_system core.test_admin_dashboard -v 1`
+Result: **68/68 passed**.
+
+Ran: `python manage.py test -v 1`
+Result: **192/192 passed**.
 
 ### System Checks
 - `python manage.py check`: 0 issues found.

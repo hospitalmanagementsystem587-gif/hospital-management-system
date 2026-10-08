@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin
+from django.core.exceptions import PermissionDenied
 from django.db.models import Sum
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -182,6 +183,8 @@ class HospitalSettingsAdmin(admin.ModelAdmin):
 
     def changelist_view(self, request, extra_context=None):
         """Redirect directly to the canonical singleton profile change form."""
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
         obj = HospitalSettings.objects.filter(pk=1).first()
         if obj:
             return redirect("admin:core_hospitalsettings_change", obj.pk)

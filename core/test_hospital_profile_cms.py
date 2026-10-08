@@ -183,17 +183,34 @@ class HospitalProfileCMSTests(TestCase):
             "currency_code": "INR",
             "_save": "Save",
         }
-        self.client.post(
+        response = self.client.post(
             "/admin/core/hospitalsettings/1/change/",
             data=payload,
             HTTP_HOST="admin.hms.test",
         )
+        self.assertEqual(response.status_code, 403)
         self.settings_obj.refresh_from_db()
         self.assertNotEqual(self.settings_obj.name, "Unauthorized Modification Attempt")
         self.assertEqual(self.settings_obj.name, "Canonical Test Hospital")
 
         # Restore permission
         self.admin_group.permissions.add(change_perm)
+
+    def test_staff_without_view_permission_cannot_use_singleton_redirect(self):
+        """The custom changelist redirect preserves Django's model permission boundary."""
+        unprivileged_staff = User.objects.create_user(
+            username="unprivileged_staff",
+            password="StrongStaffPassword123!",
+            is_staff=True,
+        )
+        self.client.force_login(unprivileged_staff)
+
+        response = self.client.get(
+            "/admin/core/hospitalsettings/",
+            HTTP_HOST="admin.hms.test",
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_validation_empty_required_name(self):
         """Submitting empty or whitespace-only name fails validation and preserves existing data."""

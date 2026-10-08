@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Permission denied" %} | {{ site_title|default:"Hospital administration" }}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{% translate "Permission denied" %}</h1>
+  <p>{% translate "You do not have permission to access or change this hospital administration resource." %}</p>
+  <p><a href="{% url 'admin:index' %}">{% translate "Return to the administration dashboard" %}</a></p>
+</div>
+{% endblock %}

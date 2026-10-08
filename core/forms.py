@@ -1,3 +1,5 @@
+import zoneinfo
+
 from django import forms
 from datetime import timedelta
 from django.forms import inlineformset_factory
@@ -418,12 +420,11 @@ class HospitalSettingsForm(forms.ModelForm):
         return name
 
     def clean_timezone(self):
-        import zoneinfo
         tz = (self.cleaned_data.get("timezone") or "").strip()
         if tz:
             try:
                 zoneinfo.ZoneInfo(tz)
-            except Exception:
+            except (zoneinfo.ZoneInfoNotFoundError, ValueError):
                 raise forms.ValidationError(f"'{tz}' is not a valid IANA time zone identifier (e.g. Asia/Kolkata).")
         return tz
 
@@ -449,4 +450,3 @@ class HospitalSettingsForm(forms.ModelForm):
 
     def clean_email(self):
         return (self.cleaned_data.get("email") or "").strip()
-
