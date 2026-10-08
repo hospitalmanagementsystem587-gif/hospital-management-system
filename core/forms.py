@@ -18,6 +18,7 @@ from .models import (
     PaymentMethod,
     Prescription,
     PrescriptionItem,
+    Service,
     Specialty,
     StaffProfile,
     DoctorSchedule,
@@ -677,3 +678,55 @@ class DoctorScheduleForm(forms.ModelForm):
                             f"from {conflict.start_time.strftime('%H:%M')} to {conflict.end_time.strftime('%H:%M')}."
                         )
         return cleaned_data
+
+
+class ServiceForm(forms.ModelForm):
+    """Administrator CMS form for managing clinical and hospital service master data."""
+
+    class Meta:
+        model = Service
+        fields = (
+            "code",
+            "name",
+            "current_charge",
+            "is_active",
+        )
+        widgets = {
+            "code": forms.TextInput(attrs={"placeholder": "e.g. CONSULT_OPD or LAB_CBC", "class": "vTextField"}),
+            "name": forms.TextInput(attrs={"placeholder": "e.g. Outpatient Specialist Consultation", "class": "vTextField"}),
+            "current_charge": forms.NumberInput(attrs={"class": "vIntegerField", "min": 0, "step": "0.01"}),
+        }
+        help_texts = {
+            "code": "Unique alphanumeric service code used across billing, orders, and diagnostic packages.",
+            "name": "Clinical and billing service title displayed on invoices and patient portals.",
+            "current_charge": "Current default base price for this service. Modifying this does not rewrite historical invoice lines.",
+            "is_active": "Controls whether this service is active and orderable. Deactivated services preserve all historical billing lines.",
+        }
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip().upper()
+        if not code:
+            raise forms.ValidationError("Service code is required.")
+        qs = Service.objects.filter(code__iexact=code)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Service with code '{code}' already exists.")
+        return code
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if not name:
+            raise forms.ValidationError("Service name is required.")
+        qs = Service.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Service with name '{name}' already exists.")
+        return name
+
+    def clean_current_charge(self):
+        charge = self.cleaned_data.get("current_charge")
+        if charge is not None and charge < 0:
+            raise forms.ValidationError("Current charge cannot be negative.")
+        return charge

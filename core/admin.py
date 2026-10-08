@@ -13,6 +13,7 @@ from .forms import (
     DepartmentForm,
     DoctorScheduleForm,
     HospitalSettingsForm,
+    ServiceForm,
     SpecialtyForm,
     StaffProfileForm,
 )
@@ -423,9 +424,36 @@ class VisitTypeAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "current_charge", "is_active")
+    form = ServiceForm
+    list_display = ("code", "name", "current_charge", "is_active", "updated_at")
+    list_editable = ("current_charge", "is_active")
     list_filter = ("is_active",)
     search_fields = ("code", "name")
+    ordering = ("name",)
+
+    fieldsets = (
+        (
+            "Service Identification",
+            {
+                "fields": ("code", "name"),
+                "description": "Unique institutional service code and standard description.",
+            },
+        ),
+        (
+            "Billing & Availability",
+            {
+                "fields": ("current_charge", "is_active"),
+                "description": "Current charge and availability for billing. Changing current_charge does not alter historical invoice records.",
+            },
+        ),
+    )
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None:
+            # Prevent deletion if referenced in any invoice lines or health packages
+            if obj.invoiceline_set.exists() or obj.health_packages.exists():
+                return False
+        return super().has_delete_permission(request, obj)
 
 
 @admin.register(HealthPackage)

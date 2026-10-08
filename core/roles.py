@@ -118,6 +118,7 @@ ROLE_PERMISSIONS = {
         "core.view_service",
         "core.add_service",
         "core.change_service",
+        "core.delete_service",
         "core.view_paymentmethod",
         "core.add_paymentmethod",
         "core.change_paymentmethod",
