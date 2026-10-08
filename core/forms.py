@@ -23,6 +23,7 @@ from .models import (
     PaymentMethod,
     Prescription,
     PrescriptionItem,
+    Price,
     Service,
     Specialty,
     StaffProfile,
@@ -991,3 +992,46 @@ class HospitalFaqForm(forms.ModelForm):
         if order is not None and order < 0:
             raise forms.ValidationError("Display order cannot be negative.")
         return order
+
+
+class PriceForm(forms.ModelForm):
+    """Administrator CMS form for canonical price creation and modifications."""
+
+    class Meta:
+        model = Price
+        fields = (
+            "price_type",
+            "content_type",
+            "object_id",
+            "scope",
+            "amount",
+            "currency",
+            "effective_from",
+            "effective_until",
+            "status",
+            "is_active",
+            "version",
+            "notes",
+        )
+        widgets = {
+            "scope": forms.TextInput(attrs={"placeholder": "e.g. standard, initial, follow_up", "class": "vTextField"}),
+            "amount": forms.NumberInput(attrs={"class": "vIntegerField", "min": 0, "step": "0.01"}),
+            "currency": forms.TextInput(attrs={"maxlength": 3, "class": "vTextField"}),
+            "effective_from": forms.DateInput(attrs={"type": "date", "class": "vDateField"}),
+            "effective_until": forms.DateInput(attrs={"type": "date", "class": "vDateField"}),
+            "notes": forms.Textarea(attrs={"rows": 3, "placeholder": "Pricing rationale or revision details...", "class": "vLargeTextField"}),
+        }
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get("amount")
+        if amount is not None and amount < 0:
+            raise forms.ValidationError("Price amount cannot be negative.")
+        return amount
+
+    def clean(self):
+        cleaned_data = super().clean()
+        effective_from = cleaned_data.get("effective_from")
+        effective_until = cleaned_data.get("effective_until")
+        if effective_from and effective_until and effective_until < effective_from:
+            raise forms.ValidationError({"effective_until": "Effective until date must be on or after effective from date."})
+        return cleaned_data

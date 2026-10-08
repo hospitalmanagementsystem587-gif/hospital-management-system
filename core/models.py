@@ -2,6 +2,8 @@ from decimal import Decimal
 import uuid
 
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
@@ -272,6 +274,9 @@ class Service(TimestampedModel):
                 name="service_charge_nonnegative",
             )
         ]
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
 
 
 class DiagnosticTest(TimestampedModel):
@@ -1572,3 +1577,134 @@ class PatientFeedback(TimestampedModel):
         if self.rating < 1 or self.rating > 5:
             from django.core.exceptions import ValidationError
             raise ValidationError({"rating": "Rating must be between 1 and 5."})
+
+
+class Price(TimestampedModel):
+    """Canonical, extensible, effective-dated pricing record for all billable entities."""
+
+    class PriceType(models.TextChoices):
+        CONSULTATION = "consultation", "Doctor Consultation"
+        SERVICE = "service", "Clinical Service"
+        DIAGNOSTIC = "diagnostic", "Diagnostic Test"
+        WARD = "ward", "IPD / Ward Daily Rate"
+        PACKAGE = "package", "Health Package"
+        CUSTOM = "custom", "Custom / Miscellaneous"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_APPROVAL = "pending", "Pending Approval"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    price_type = models.CharField(
+        max_length=24,
+        choices=PriceType.choices,
+        default=PriceType.CUSTOM,
+        db_index=True,
+    )
+
+    # Polymorphic reference to the billable entity (Service, DiagnosticTest, StaffProfile, Ward, HealthPackage, VisitType)
+    content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        related_name="canonical_prices",
+        null=True,
+        blank=True,
+    )
+    object_id = models.PositiveBigIntegerField(null=True, blank=True, db_index=True)
+    item = GenericForeignKey("content_type", "object_id")
+
+    # Business scope discriminator (e.g. "initial", "follow_up", "standard", or specialty reference)
+    scope = models.CharField(max_length=60, default="standard", blank=True, db_index=True)
+
+    # Monetary value and currency
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="INR")
+
+    # Effective date temporal validity
+    effective_from = models.DateField(default=timezone.localdate, db_index=True)
+    effective_until = models.DateField(null=True, blank=True, db_index=True)
+
+    # Governance & activation lifecycle
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.APPROVED,
+        db_index=True,
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    # Version tracking
+    version = models.PositiveIntegerField(default=1)
+
+    # Governance & audit metadata
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_prices",
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_prices",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-effective_from", "-version", "-id"]
+        indexes = [
+            models.Index(fields=["price_type", "status", "is_active"], name="price_type_stat_act_idx"),
+            models.Index(fields=["content_type", "object_id", "status"], name="price_item_stat_idx"),
+            models.Index(fields=["effective_from", "effective_until"], name="price_eff_dates_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gte=0),
+                name="canonical_price_amount_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=Q(effective_until__isnull=True) | Q(effective_until__gte=models.F("effective_from")),
+                name="canonical_price_dates_valid",
+            ),
+        ]
+        permissions = [
+            ("approve_price", "Can approve, reject, or activate canonical prices"),
+        ]
+
+    def __str__(self):
+        target_name = str(self.item) if self.item else f"{self.price_type}:{self.object_id}"
+        return f"{self.get_price_type_display()} - {target_name} ({self.currency} {self.amount}) [{self.status}]"
+
+    def clean(self):
+        super().clean()
+        if self.amount is not None and self.amount < 0:
+            from django.core.exceptions import ValidationError
+            raise ValidationError({"amount": "Price amount cannot be negative."})
+        if self.effective_from and self.effective_until and self.effective_until < self.effective_from:
+            from django.core.exceptions import ValidationError
+            raise ValidationError({"effective_until": "Effective until date must be on or after effective from date."})
+
+    @classmethod
+    def get_current_price(cls, item, scope="standard", as_of=None, price_type=None):
+        """Resolves the current approved effective canonical Price for an item."""
+        if as_of is None:
+            as_of = timezone.localdate()
+        ct = ContentType.objects.get_for_model(item)
+        qs = cls.objects.filter(
+            content_type=ct,
+            object_id=item.pk,
+            scope=scope,
+            is_active=True,
+            status=cls.Status.APPROVED,
+            effective_from__lte=as_of,
+        ).filter(
+            Q(effective_until__isnull=True) | Q(effective_until__gte=as_of)
+        )
+        if price_type:
+            qs = qs.filter(price_type=price_type)
+        return qs.order_by("-effective_from", "-version", "-id").first()

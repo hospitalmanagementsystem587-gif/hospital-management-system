@@ -18,6 +18,7 @@ from .forms import (
     HospitalFacilityForm,
     HospitalFaqForm,
     HospitalSettingsForm,
+    PriceForm,
     ServiceForm,
     SpecialtyForm,
     StaffProfileForm,
@@ -45,6 +46,7 @@ from .models import (
     Payment,
     PaymentMethod,
     Prescription,
+    Price,
     Refund,
     Service,
     Specialty,
@@ -850,3 +852,61 @@ class PatientFeedbackAdmin(admin.ModelAdmin):
         "moderation_notes",
     )
     readonly_fields = ("patient", "appointment", "doctor", "created_at", "updated_at")
+
+
+@admin.register(Price)
+class PriceAdmin(admin.ModelAdmin):
+    form = PriceForm
+    list_display = (
+        "id",
+        "price_type",
+        "target_item",
+        "scope",
+        "amount",
+        "currency",
+        "effective_from",
+        "effective_until",
+        "status",
+        "is_active",
+        "version",
+        "updated_at",
+    )
+    list_editable = ("is_active",)
+    list_filter = ("price_type", "status", "is_active", "currency", "effective_from")
+    search_fields = ("scope", "notes", "currency")
+    ordering = ("-effective_from", "-id")
+
+    def target_item(self, obj):
+        return str(obj.item) if obj.item else f"{obj.price_type}:{obj.object_id}"
+    target_item.short_description = "Target Item"
+
+    fieldsets = (
+        (
+            "Price Target & Scope",
+            {
+                "fields": ("price_type", "content_type", "object_id", "scope", "version"),
+                "description": "Billable classification, polymorphic item reference, scope discriminator, and version number.",
+            },
+        ),
+        (
+            "Monetary Valuation",
+            {
+                "fields": ("amount", "currency"),
+                "description": "Authoritative non-negative decimal amount and ISO currency code.",
+            },
+        ),
+        (
+            "Temporal Validity",
+            {
+                "fields": ("effective_from", "effective_until"),
+                "description": "Effective date boundaries. Future dates schedule forthcoming price changes.",
+            },
+        ),
+        (
+            "Governance & Status",
+            {
+                "fields": ("status", "is_active", "notes"),
+                "description": "Lifecycle state and administrative remarks.",
+            },
+        ),
+    )
