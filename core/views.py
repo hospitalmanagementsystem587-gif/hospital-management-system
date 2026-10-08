@@ -1169,8 +1169,8 @@ def prescription_print(request, pk):
     if _has_role(request.user, "Doctor"):
         profile = _doctor_profile(request.user)
         prescriptions = Prescription.objects.filter(doctor=profile)
-    elif _has_role(request.user, "Pharmacy"):
-        prescriptions = Prescription.objects.filter(status=Prescription.Status.ISSUED)
+    elif _has_role(request.user, "Pharmacy") or _has_role(request.user, "Administrator"):
+        prescriptions = Prescription.objects.all()
     else:
         raise PermissionDenied
     prescription = get_object_or_404(

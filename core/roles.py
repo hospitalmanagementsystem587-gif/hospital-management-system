@@ -142,6 +142,7 @@ ROLE_PERMISSIONS = {
         "core.view_patient",
         "core.add_patient",
         "core.change_patient",
+        "core.view_prescription",
         "core.view_appointment",
         "core.add_appointment",
         "core.change_appointment",
