@@ -1,0 +1,22 @@
+<div class="hms-card{% if class %} {{ class }}{% endif %}">
+  {% if header or title %}
+    <div class="hms-card-header">
+      <div class="hms-card-heading-group">
+        {% if kicker %}<span class="page-kicker">{{ kicker }}</span>{% endif %}
+        {% if title %}<h2 class="hms-card-title">{{ title }}</h2>{% endif %}
+        {% if subtitle %}<p class="hms-card-subtitle">{{ subtitle }}</p>{% endif %}
+      </div>
+      {% if badge %}
+        <span class="hms-badge hms-badge-{{ badge_variant|default:'info' }}">{{ badge }}</span>
+      {% endif %}
+    </div>
+  {% endif %}
+  <div class="hms-card-body">
+    {{ content|safe }}
+  </div>
+  {% if footer %}
+    <div class="hms-card-footer">
+      {{ footer|safe }}
+    </div>
+  {% endif %}
+</div>

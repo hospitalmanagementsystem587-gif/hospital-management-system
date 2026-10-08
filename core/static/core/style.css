@@ -25,17 +25,86 @@
   --color-warning-border: #fde68a;
   --color-success: #10b981;
   --color-success-bg: #ecfdf5;
+
+  /* Typography scale */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Manrope', var(--font-sans);
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+
+  /* Spacing system (8pt grid foundation) */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+
+  /* Radius tokens */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-pill: 9999px;
+
+  /* Shadows */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.08);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.08);
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Accessibility & focus tokens */
   --target-min: 44px;
+  --focus-ring-color: #0284c7;
+  --focus-ring-offset: 2px;
+  --focus-ring-width: 3px;
+  --focus-ring: 0 0 0 var(--focus-ring-width) rgba(2, 132, 199, 0.25);
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+}
+
+/* Portal-specific thematic accents (preserves single backend/CSS bundle) */
+[data-portal="admin"] {
+  --color-primary: #0369a1;
+  --color-primary-hover: #075985;
+}
+[data-portal="staff"] {
+  --color-primary: #0284c7;
+  --color-primary-hover: #0369a1;
+}
+[data-portal="store"] {
+  --color-primary: #0f766e;
+  --color-primary-hover: #115e59;
+  --focus-ring-color: #0f766e;
+  --focus-ring: 0 0 0 var(--focus-ring-width) rgba(15, 118, 110, 0.25);
+}
+[data-portal="patient"] {
+  --color-primary: #0284c7;
+  --color-primary-hover: #0369a1;
+}
+[data-portal="agent"] {
+  --color-primary: #4338ca;
+  --color-primary-hover: #3730a3;
+  --focus-ring-color: #4338ca;
+  --focus-ring: 0 0 0 var(--focus-ring-width) rgba(67, 56, 202, 0.25);
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * {
@@ -52,6 +121,35 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+/* Accessibility: Skip to Content Link */
+.hms-skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.75rem 1.25rem;
+  background: var(--color-secondary);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  text-decoration: none;
+  transition: top 0.2s ease;
+}
+
+.hms-skip-link:focus {
+  top: 1rem;
+  outline: 3px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* Focus visibility for accessible keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 a {
@@ -4100,4 +4198,439 @@ select.appointment-control {
   .patient-search-form { align-items: stretch; flex-wrap: wrap; }
   .patient-search-input { min-width: 100%; }
   .patient-search-form .btn-stitch-primary { flex: 1; }
+}
+
+/* ==========================================================================
+   HMS Shared Design System (KAN-38)
+   Reusable components: Alerts, Badges, Cards, Dialogs, Empty States,
+   Pagination, Form Groups, Status Indicators, Loading Skeletons
+   ========================================================================== */
+
+/* 1. Alerts */
+.hms-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  margin-bottom: 1.25rem;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  box-shadow: var(--shadow-xs);
+}
+
+.hms-alert-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.hms-alert-content {
+  flex: 1;
+}
+
+.hms-alert-title {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.hms-alert-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  min-height: auto;
+  color: currentColor;
+  opacity: 0.7;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.hms-alert-close:hover {
+  opacity: 1;
+  background: transparent;
+}
+
+.hms-alert-info {
+  background-color: var(--color-primary-container);
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+.hms-alert-info .hms-alert-title { color: #075985; }
+
+.hms-alert-success {
+  background-color: var(--color-success-bg);
+  border-color: #a7f3d0;
+  color: #047857;
+}
+.hms-alert-success .hms-alert-title { color: #065f46; }
+
+.hms-alert-warning {
+  background-color: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: #b45309;
+}
+.hms-alert-warning .hms-alert-title { color: #92400e; }
+
+.hms-alert-danger,
+.hms-alert-error {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.hms-alert-danger .hms-alert-title,
+.hms-alert-error .hms-alert-title { color: #991b1b; }
+
+/* 2. Status Badges & Indicators */
+.hms-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  background: var(--color-surface-container);
+  color: var(--color-text-muted);
+  border: 1px solid transparent;
+}
+
+.hms-badge-neutral { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.hms-badge-info    { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+.hms-badge-success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.hms-badge-warning { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.hms-badge-danger  { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+
+.hms-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.hms-status-dot-neutral { background-color: #94a3b8; }
+.hms-status-dot-info    { background-color: #0284c7; }
+.hms-status-dot-success { background-color: #10b981; }
+.hms-status-dot-warning { background-color: #f59e0b; }
+.hms-status-dot-danger  { background-color: #ef4444; }
+
+/* 3. Cards */
+.hms-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xs);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.hms-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.hms-card-heading-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.hms-card-title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-secondary);
+  margin: 0;
+}
+
+.hms-card-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.hms-card-body {
+  padding: 1.5rem;
+}
+
+.hms-card-footer {
+  padding: 1rem 1.5rem;
+  background: var(--color-surface-container-low);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* 4. Empty States */
+.hms-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 3rem 1.5rem;
+  min-height: 240px;
+}
+
+.hms-empty-state-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.hms-empty-state-title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-secondary);
+  margin-bottom: 0.35rem;
+}
+
+.hms-empty-state-description {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  max-width: 440px;
+  line-height: 1.6;
+  margin-bottom: 1.25rem;
+}
+
+.hms-empty-state-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+/* 5. Pagination */
+.hms-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.hms-pagination-controls {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+}
+
+.hms-pagination-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-secondary);
+  font-weight: 600;
+  min-height: 36px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.hms-pagination-link:hover:not(.disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-surface-container);
+}
+
+.hms-pagination-link.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--color-surface-container-low);
+}
+
+.hms-pagination-current {
+  padding: 0 0.5rem;
+  font-weight: 600;
+  color: var(--color-secondary);
+}
+
+/* 6. Form Groups & Field Error Presentation */
+.hms-form-group {
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.hms-form-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hms-form-required {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.hms-form-help {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.hms-form-field-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-danger);
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+.hms-field-has-error input,
+.hms-field-has-error select,
+.hms-field-has-error textarea {
+  border-color: var(--color-danger) !important;
+}
+
+.hms-field-has-error input:focus,
+.hms-field-has-error select:focus,
+.hms-field-has-error textarea:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+.hms-form-error-list {
+  margin: 0.25rem 0 0 1.25rem;
+  padding: 0;
+}
+
+/* 7. Dialog / Modal (HTML5 Dialog standard) */
+dialog.hms-dialog {
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: 0;
+  background: transparent;
+  max-width: 520px;
+  width: 90%;
+  box-shadow: var(--shadow-lg);
+  margin: auto;
+}
+
+dialog.hms-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.hms-dialog-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.hms-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.hms-dialog-title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-secondary);
+  margin: 0;
+}
+
+.hms-dialog-close {
+  background: none;
+  border: none;
+  padding: 0.35rem;
+  min-height: auto;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.hms-dialog-close:hover {
+  color: var(--color-secondary);
+  background: var(--color-surface-container);
+}
+
+.hms-dialog-body {
+  padding: 1.5rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-secondary);
+  line-height: 1.6;
+}
+
+.hms-dialog-footer {
+  padding: 1rem 1.5rem;
+  background: var(--color-surface-container-low);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* 8. Loading Skeletons */
+.hms-skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
+  background-size: 400% 100%;
+  animation: hms-skeleton-pulse 1.4s ease infinite;
+  border-radius: var(--radius-sm);
+}
+
+.hms-skeleton-text {
+  height: 1rem;
+  margin-bottom: 0.5rem;
+  width: 100%;
+}
+
+.hms-skeleton-text-sm {
+  height: 0.75rem;
+  width: 60%;
+}
+
+.hms-skeleton-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+@keyframes hms-skeleton-pulse {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }

@@ -1,0 +1,31 @@
+<dialog id="{{ dialog_id|default:'hms-confirm-dialog' }}" class="hms-dialog" aria-labelledby="{{ dialog_id|default:'hms-confirm-dialog' }}-title">
+  <div class="hms-dialog-panel">
+    <div class="hms-dialog-header">
+      <h3 id="{{ dialog_id|default:'hms-confirm-dialog' }}-title" class="hms-dialog-title">{{ title|default:"Confirm action" }}</h3>
+      <button type="button" class="hms-dialog-close" aria-label="Close dialog" onclick="this.closest('dialog').close();">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="hms-dialog-body">
+      <p>{{ message|default:"Are you sure you want to proceed with this action?" }}</p>
+    </div>
+    <div class="hms-dialog-footer">
+      <button type="button" class="btn-stitch-secondary" onclick="this.closest('dialog').close();">
+        {{ cancel_label|default:"Cancel" }}
+      </button>
+      {% if confirm_form_id %}
+        <button type="submit" form="{{ confirm_form_id }}" class="btn-stitch-primary{% if danger %} btn-stitch-danger{% endif %}">
+          {{ confirm_label|default:"Confirm" }}
+        </button>
+      {% elif confirm_action_url %}
+        <a href="{{ confirm_action_url }}" class="btn-stitch-primary{% if danger %} btn-stitch-danger{% endif %}">
+          {{ confirm_label|default:"Confirm" }}
+        </a>
+      {% else %}
+        <button type="button" class="btn-stitch-primary{% if danger %} btn-stitch-danger{% endif %}" onclick="this.closest('dialog').close();">
+          {{ confirm_label|default:"Confirm" }}
+        </button>
+      {% endif %}
+    </div>
+  </div>
+</dialog>

@@ -1,0 +1,31 @@
+{% if form.non_field_errors %}
+  <div class="hms-alert hms-alert-danger" role="alert">
+    <div class="hms-alert-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    </div>
+    <div class="hms-alert-content">
+      <strong class="hms-alert-title">Please correct the following errors:</strong>
+      <ul class="hms-form-error-list">
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+{% endif %}
+
+{% for field in form %}
+  <div class="hms-form-group{% if field.errors %} hms-field-has-error{% endif %}">
+    <label for="{{ field.id_for_label }}" class="hms-form-label">
+      {{ field.label }}
+      {% if field.field.required %}<span class="hms-form-required" aria-hidden="true">*</span><span class="sr-only">(required)</span>{% endif %}
+    </label>
+    {{ field }}
+    {% if field.help_text %}
+      <span class="hms-form-help" id="{{ field.id_for_label }}_help">{{ field.help_text }}</span>
+    {% endif %}
+    {% if field.errors %}
+      <div class="hms-form-field-error" id="{{ field.id_for_label }}_error" role="alert">
+        {{ field.errors.0 }}
+      </div>
+    {% endif %}
+  </div>
+{% endfor %}

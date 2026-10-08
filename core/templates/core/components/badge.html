@@ -1,0 +1,4 @@
+<span class="hms-badge hms-badge-{{ variant|default:'neutral' }}{% if dot %} hms-badge-dot{% endif %}">
+  {% if dot %}<span class="hms-status-dot hms-status-dot-{{ variant|default:'neutral' }}" aria-hidden="true"></span>{% endif %}
+  {% if label %}{{ label }}{% else %}{{ text }}{% endif %}
+</span>

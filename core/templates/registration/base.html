@@ -1,18 +1,19 @@
 {% load static %}
 <!doctype html>
-<html lang="en">
+<html lang="en"{% if portal %} data-portal="{{ portal }}"{% endif %}>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Staff sign in{% endblock %} | Vedant Hospital</title>
+    <title>{% block title %}Staff sign in{% endblock %} | {% if hospital.name and hospital.name != 'Hospital name not configured' %}{{ hospital.name }}{% else %}Vedant Hospital{% endif %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'core/style.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'core/style.css' %}?v=3">
   </head>
   <body class="auth-body">
+    <a href="#auth-content" class="hms-skip-link">Skip to authentication form</a>
     {% block auth_layout %}
-      <div class="auth-wrapper">
+      <div class="auth-wrapper" id="auth-content">
         <div class="auth-card">
           {% block content %}{% endblock %}
         </div>

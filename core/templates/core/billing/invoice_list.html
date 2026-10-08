@@ -48,7 +48,9 @@
       </tr>
     {% empty %}
       <tr>
-        <td colspan="5" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">No invoices found.</td>
+        <td colspan="5">
+          {% include "core/components/empty_state.html" with icon="invoice" title="No invoices found" description="There are no billing invoices matching your query." %}
+        </td>
       </tr>
     {% endfor %}
   </tbody>

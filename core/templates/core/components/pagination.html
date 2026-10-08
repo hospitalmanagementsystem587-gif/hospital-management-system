@@ -1,0 +1,32 @@
+{% if page_obj and page_obj.has_other_pages %}
+  <nav class="hms-pagination" aria-label="Pagination navigation">
+    <div class="hms-pagination-info">
+      Showing <strong>{{ page_obj.start_index }}</strong> to <strong>{{ page_obj.end_index }}</strong> of <strong>{{ page_obj.paginator.count }}</strong> entries
+    </div>
+    <ul class="hms-pagination-controls">
+      {% if page_obj.has_previous %}
+        <li>
+          <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}" class="hms-pagination-link" aria-label="Previous page">
+            &larr; Previous
+          </a>
+        </li>
+      {% else %}
+        <li><span class="hms-pagination-link disabled" aria-disabled="true">&larr; Previous</span></li>
+      {% endif %}
+
+      <li class="hms-pagination-current" aria-current="page">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </li>
+
+      {% if page_obj.has_next %}
+        <li>
+          <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}" class="hms-pagination-link" aria-label="Next page">
+            Next &rarr;
+          </a>
+        </li>
+      {% else %}
+        <li><span class="hms-pagination-link disabled" aria-disabled="true">Next &rarr;</span></li>
+      {% endif %}
+    </ul>
+  </nav>
+{% endif %}
