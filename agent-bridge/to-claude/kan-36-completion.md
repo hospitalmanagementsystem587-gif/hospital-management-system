@@ -1,11 +1,11 @@
 # KAN-36 Completion Report — Shared Authentication & Session Layer
 
-**Date:** 2026-10-08  
-**Ticket:** KAN-36 (Portal Foundation — Shared Authentication & Session Layer)  
-**Branch:** `codex/kan-36-shared-auth-session`  
-**Base Commit (KAN-35):** `09d0f26195012befb393233e33001ea726e4efd3`  
-**KAN-36 Commit:** `2806cff4891152a51a8080f3e69f8c44b971ca60`  
-**Status:** Done  
+**Date:** 2026-10-08
+**Ticket:** KAN-36 (Portal Foundation — Shared Authentication & Session Layer)
+**Branch:** `codex/kan-36-shared-auth-session`
+**Base Commit (KAN-35):** `09d0f26195012befb393233e33001ea726e4efd3`
+**KAN-36 implementation commit:** `2806cff4891152a51a8080f3e69f8c44b971ca60`
+**Status:** Done
 
 ---
 
@@ -67,12 +67,13 @@ Implemented the shared Django authentication and session layer required by KAN-3
 - **Focused KAN-36 test suite:** `python manage.py test core.test_shared_auth_session` → 6/6 tests passed.
 - **KAN-35 Portal architecture tests:** `python manage.py test core.test_portal_architecture` → 7/7 tests passed.
 - **Android JWT API tests:** `python manage.py test core.test_patient_api.PatientApiTests.test_token_refresh_and_blacklisting_revocation core.test_patient_api.PatientApiTests.test_logout_all_devices core.test_patient_api.PatientApiTests.test_auth_throttling_rejects_excessive_attempts` → 3/3 tests passed.
-- **Auth lifecycle & role permissions regression:** `python manage.py test core.tests.AuthenticationLifecycleTests core.tests.RolePermissionTests` → 24/24 tests passed.
-- **Whitespace / diff check:** `git diff --check` → Clean.
+- **Auth/JWT targeted regression:** the three named Android JWT tests plus `AuthenticationLifecycleTests` and `RolePermissionTests` → 14/14 tests passed during independent verification.
+- **Full Django suite:** `python manage.py test -v 1` → 137/137 tests passed during independent verification.
+- **Whitespace / diff check:** Clean after the independent-review documentation cleanup commit.
 
 ---
 
 ## 6. Next Ticket
 
-**KAN-37 — Portal-Aware Authorization & Role Mapping Matrix**  
+**KAN-37 — Portal-Aware Authorization & Role Mapping Matrix**
 (Ready to begin from this verified KAN-36 commit `2806cff4891152a51a8080f3e69f8c44b971ca60`).

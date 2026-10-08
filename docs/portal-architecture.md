@@ -55,4 +55,3 @@ debugging.
 - **Session expiry:** Configurable via `DJANGO_SESSION_COOKIE_AGE` (defaults to 28,800s / 8h), expiring at browser close (`SESSION_EXPIRE_AT_BROWSER_CLOSE = True`).
 - **Cookie & Subdomain Policy:** Cookies use `HttpOnly`, `SameSite=Lax`, and `Secure` when `DEBUG=False`. Cookie domains are configurable via `DJANGO_SESSION_COOKIE_DOMAIN` and `DJANGO_CSRF_COOKIE_DOMAIN` (e.g. `.example.com` for cross-subdomain single sign-on across `*.example.com`, or omitted/None for strict host-only session isolation).
 - **Portal Context:** `request.portal` is set by `PortalRoutingMiddleware` and passed down to templates via `core.context_processors.hospital_context`.
-
