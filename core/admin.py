@@ -25,6 +25,7 @@ from .forms import (
 from .models import (
     Admission,
     Appointment,
+    AuditEvent,
     Bed,
     Department,
     DiagnosticTest,
@@ -557,6 +558,34 @@ class HealthPackageAdmin(admin.ModelAdmin):
         return obj.included_services.count()
     services_count.short_description = "Included Services"
 
+    def save_model(self, request, obj, form, change):
+        previous_published = None
+        if change and obj.pk:
+            previous = HealthPackage.objects.filter(pk=obj.pk).values("is_published").first()
+            if previous:
+                previous_published = previous["is_published"]
+
+        super().save_model(request, obj, form, change)
+
+        actor_profile = StaffProfile.objects.filter(user=request.user).first()
+        if not change:
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action="healthpackage.created",
+                target_type="healthpackage",
+                target_id=str(obj.pk),
+                details={"code": obj.code, "is_published": obj.is_published, "name": obj.name},
+            )
+        elif previous_published != obj.is_published:
+            action_name = "healthpackage.published" if obj.is_published else "healthpackage.unpublished"
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action=action_name,
+                target_type="healthpackage",
+                target_id=str(obj.pk),
+                details={"code": obj.code, "is_published": obj.is_published, "name": obj.name},
+            )
+
 
 @admin.register(HealthContent)
 class HealthContentAdmin(admin.ModelAdmin):
@@ -610,6 +639,12 @@ class HealthContentAdmin(admin.ModelAdmin):
     )
 
     def save_model(self, request, obj, form, change):
+        previous_status = None
+        if change and obj.pk:
+            previous = HealthContent.objects.filter(pk=obj.pk).values("status").first()
+            if previous:
+                previous_status = previous["status"]
+
         if obj.status == HealthContent.Status.PUBLISHED:
             if not request.user.has_perm("core.publish_healthcontent"):
                 from django.core.exceptions import PermissionDenied
@@ -617,7 +652,34 @@ class HealthContentAdmin(admin.ModelAdmin):
             if not obj.reviewer:
                 obj.reviewer = request.user
             obj.reviewed_at = timezone.now()
+
         super().save_model(request, obj, form, change)
+
+        actor_profile = StaffProfile.objects.filter(user=request.user).first()
+        if not change:
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action="content.created",
+                target_type="healthcontent",
+                target_id=str(obj.pk),
+                details={"slug": obj.slug, "status": obj.status, "title": obj.title},
+            )
+        elif previous_status != obj.status:
+            action_name = "content.published" if obj.status == HealthContent.Status.PUBLISHED else (
+                "content.unpublished" if previous_status == HealthContent.Status.PUBLISHED else "content.status_changed"
+            )
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action=action_name,
+                target_type="healthcontent",
+                target_id=str(obj.pk),
+                details={
+                    "slug": obj.slug,
+                    "previous_status": previous_status,
+                    "new_status": obj.status,
+                    "reviewer": obj.reviewer.username if obj.reviewer else None,
+                },
+            )
 
 
 @admin.register(PaymentMethod)
@@ -674,6 +736,34 @@ class HospitalFacilityAdmin(admin.ModelAdmin):
         ),
     )
 
+    def save_model(self, request, obj, form, change):
+        previous_active = None
+        if change and obj.pk:
+            previous = HospitalFacility.objects.filter(pk=obj.pk).values("is_active").first()
+            if previous:
+                previous_active = previous["is_active"]
+
+        super().save_model(request, obj, form, change)
+
+        actor_profile = StaffProfile.objects.filter(user=request.user).first()
+        if not change:
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action="facility.created",
+                target_type="hospitalfacility",
+                target_id=str(obj.pk),
+                details={"title": obj.title, "is_active": obj.is_active},
+            )
+        elif previous_active != obj.is_active:
+            action_name = "facility.activated" if obj.is_active else "facility.deactivated"
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action=action_name,
+                target_type="hospitalfacility",
+                target_id=str(obj.pk),
+                details={"title": obj.title, "is_active": obj.is_active},
+            )
+
 
 @admin.register(HospitalFaq)
 class HospitalFaqAdmin(admin.ModelAdmin):
@@ -707,6 +797,34 @@ class HospitalFaqAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    def save_model(self, request, obj, form, change):
+        previous_active = None
+        if change and obj.pk:
+            previous = HospitalFaq.objects.filter(pk=obj.pk).values("is_active").first()
+            if previous:
+                previous_active = previous["is_active"]
+
+        super().save_model(request, obj, form, change)
+
+        actor_profile = StaffProfile.objects.filter(user=request.user).first()
+        if not change:
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action="faq.created",
+                target_type="hospitalfaq",
+                target_id=str(obj.pk),
+                details={"question": obj.question, "is_active": obj.is_active},
+            )
+        elif previous_active != obj.is_active:
+            action_name = "faq.activated" if obj.is_active else "faq.deactivated"
+            AuditEvent.objects.create(
+                actor=actor_profile,
+                action=action_name,
+                target_type="hospitalfaq",
+                target_id=str(obj.pk),
+                details={"question": obj.question, "is_active": obj.is_active},
+            )
 
 
 @admin.register(PatientFeedback)

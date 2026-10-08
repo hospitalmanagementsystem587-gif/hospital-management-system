@@ -815,6 +815,11 @@ class HealthPackageForm(forms.ModelForm):
             "valid_until": forms.DateInput(attrs={"type": "date", "class": "vDateField"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "included_services" in self.fields:
+            self.fields["included_services"].required = False
+
     def clean_code(self):
         code = (self.cleaned_data.get("code") or "").strip().upper()
         if not code:
