@@ -4,20 +4,9 @@ Enforces server-side coarse admission and resource/object-level scopes across
 the hospital management system browser portals and applications.
 """
 
-from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 
-from core.models import (
-    Admission,
-    Appointment,
-    Consultation,
-    Invoice,
-    Patient,
-    PatientDocument,
-    Payment,
-    Prescription,
-    StaffProfile,
-)
+from core.models import Appointment, Patient, StaffProfile
 
 PORTAL_ALLOWED_GROUPS = {
     "admin": frozenset(),
@@ -57,7 +46,11 @@ def user_can_access_portal(user, portal):
 
 def doctor_patient_queryset(user):
     """Return patient records assigned to a doctor through appointments or consultations."""
-    if not user.is_authenticated or not user.is_active or not user.groups.filter(name="Doctor").exists():
+    if (
+        not user.is_authenticated
+        or not user.is_active
+        or not user.groups.filter(name="Doctor").exists()
+    ):
         return Patient.objects.none()
 
     if user.has_perm("core.view_all_patient_records"):
@@ -85,7 +78,7 @@ def get_authorized_patient_queryset(user):
         return Patient.objects.none()
 
     groups = set(user.groups.values_list("name", flat=True))
-    if "Reception" in groups or "Administrator" in groups:
+    if "Reception" in groups:
         return Patient.objects.filter(archived_at__isnull=True)
 
     if "Doctor" in groups:
@@ -107,7 +100,7 @@ def get_authorized_appointment_queryset(user):
         return Appointment.objects.none()
 
     groups = set(user.groups.values_list("name", flat=True))
-    if "Reception" in groups or "Administrator" in groups:
+    if "Reception" in groups:
         return Appointment.objects.all()
 
     if "Doctor" in groups:

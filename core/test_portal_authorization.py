@@ -472,6 +472,36 @@ class ObjectLevelAuthorizationTests(TestCase):
         # Ordinary user sees none
         self.assertEqual(get_authorized_appointment_queryset(self.ordinary_user).count(), 0)
 
+    def test_live_patient_and_appointment_routes_use_centralized_scopes(self):
+        self.client.force_login(self.reception_user)
+        patient_response = self.client.get("/patients/")
+        self.assertEqual(patient_response.status_code, 200)
+        self.assertContains(patient_response, self.patient_a.full_name)
+        self.assertContains(patient_response, self.patient_b.full_name)
+        self.assertNotContains(patient_response, self.archived_patient.full_name)
+
+        appointment_response = self.client.get("/appointments/")
+        self.assertEqual(appointment_response.status_code, 200)
+        self.assertContains(appointment_response, self.patient_a.full_name)
+        self.assertContains(appointment_response, self.patient_b.full_name)
+
+        self.client.force_login(self.doc1_user)
+        doctor_patient_response = self.client.get("/patients/")
+        self.assertEqual(doctor_patient_response.status_code, 200)
+        self.assertContains(doctor_patient_response, self.patient_a.full_name)
+        self.assertNotContains(doctor_patient_response, self.patient_b.full_name)
+
+        doctor_appointment_response = self.client.get("/appointments/")
+        self.assertEqual(doctor_appointment_response.status_code, 200)
+        self.assertContains(doctor_appointment_response, self.patient_a.full_name)
+        self.assertNotContains(doctor_appointment_response, self.patient_b.full_name)
+
+        for user in (self.admin_user, self.pharm_user):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                self.assertEqual(self.client.get("/patients/").status_code, 403)
+                self.assertEqual(self.client.get("/appointments/").status_code, 403)
+
     def test_consultation_detail_isolation(self):
         # Doctor 1 can view own consultation
         self.client.force_login(self.doc1_user)

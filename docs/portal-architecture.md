@@ -67,9 +67,9 @@ debugging.
   - `agent.{domain}`: Fail-closed; restricted to active superusers and `Administrator` group until dedicated support-agent role is introduced.
   - **Inactive & Anonymous:** Inactive users cannot authenticate and have session access revoked immediately. Anonymous users are redirected to `/accounts/login/` with safe `next` parameter preservation.
 - **Resource & Object Scopes:**
-  - **Patients:** Receptionists and Administrators access all non-archived patients; Doctors only access patients assigned via active appointments or consultations (`doctor_patient_queryset`); ordinary users and patients without staff roles cannot access staff patient directories.
-  - **Appointments:** Receptionists and Administrators access all appointments; Doctors access only their own assigned schedule.
+  - **Patients:** Receptionists access all non-archived patients; Doctors only access patients assigned via appointments or consultations (`doctor_patient_queryset`); Administrators retain their existing finance/master-data scope and do not receive clinical patient-directory access.
+  - **Appointments:** Receptionists access all appointments; Doctors access only their own assigned schedule. Administrators do not receive operational appointment access.
   - **Clinical Records & Prescriptions:** Consultations are scoped to the attending doctor; prescriptions are accessible only to the attending doctor and Pharmacy (when `ISSUED`). Unauthorized clinical accesses return non-disclosing HTTP 404s.
-  - **Documents & Downloads:** Download access requires verified patient ownership or authorized doctor/staff relationship. Quarantined, rejected, unreleased, or revoked documents return non-disclosing HTTP 404s.
+  - **Documents & Downloads:** Staff downloads require an authorized patient relationship and a clean validated file. Patient-facing API downloads additionally require patient ownership, release, and non-revocation. Disallowed requests return non-disclosing HTTP 404s.
   - **Billing & Finance:** Invoices and payments are managed by Reception and Administrators. Patients can only query and view their own issued invoices via the API.
   - **Two-Patient Isolation:** Two distinct patients can never view or download each other's data, invoices, or health documents across portals and API endpoints.

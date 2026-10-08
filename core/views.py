@@ -189,10 +189,12 @@ def _has_role(user, role):
 
 
 def _patient_read_queryset(user):
-    if _has_role(user, "Reception") and StaffProfile.objects.filter(user=user).exists():
-        return Patient.objects.filter(archived_at__isnull=True)
-    if _has_role(user, "Doctor"):
-        return doctor_patient_queryset(user).filter(archived_at__isnull=True)
+    patients = get_authorized_patient_queryset(user)
+    if user.is_superuser or (
+        StaffProfile.objects.filter(user=user).exists()
+        and user.groups.filter(name__in=("Reception", "Doctor")).exists()
+    ):
+        return patients
     raise PermissionDenied
 
 
@@ -806,10 +808,12 @@ def patient_document_download(request, patient_pk, public_id):
 
 
 def _appointment_read_queryset(user):
-    if _has_role(user, "Reception") and StaffProfile.objects.filter(user=user).exists():
-        return Appointment.objects.all()
-    if _has_role(user, "Doctor"):
-        return Appointment.objects.filter(doctor__user=user)
+    appointments = get_authorized_appointment_queryset(user)
+    if user.is_superuser or (
+        StaffProfile.objects.filter(user=user).exists()
+        and user.groups.filter(name__in=("Reception", "Doctor")).exists()
+    ):
+        return appointments
     raise PermissionDenied
 
 
