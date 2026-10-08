@@ -12,6 +12,7 @@ from .models import (
     Consultation,
     Department,
     DiagnosticTest,
+    HealthContent,
     HealthPackage,
     HospitalSettings,
     InpatientDeposit,
@@ -846,4 +847,62 @@ class HealthPackageForm(forms.ModelForm):
         valid_until = cleaned_data.get("valid_until")
         if valid_from and valid_until and valid_until < valid_from:
             raise forms.ValidationError({"valid_until": "Validity end date must be on or after valid from date."})
+        return cleaned_data
+
+
+class HealthContentForm(forms.ModelForm):
+    """Administrator / Clinical CMS form for authoring and managing structured educational articles."""
+
+    class Meta:
+        model = HealthContent
+        fields = (
+            "slug",
+            "title",
+            "category",
+            "summary",
+            "body",
+            "key_takeaways",
+            "audience",
+            "language",
+            "references",
+            "emergency_disclaimer",
+            "version",
+            "effective_from",
+            "expires_on",
+            "status",
+            "author",
+            "reviewer",
+            "reviewed_at",
+            "ai_provider",
+            "ai_model",
+            "ai_prompt_version",
+        )
+        widgets = {
+            "slug": forms.TextInput(attrs={"placeholder": "e.g. managing-type-2-diabetes", "class": "vTextField"}),
+            "title": forms.TextInput(attrs={"placeholder": "e.g. Managing Type 2 Diabetes: Daily Care & Nutrition", "class": "vTextField"}),
+            "category": forms.TextInput(attrs={"placeholder": "e.g. Endocrinology & Chronic Care", "class": "vTextField"}),
+            "summary": forms.Textarea(attrs={"rows": 3, "placeholder": "Executive summary for patients and website cards...", "class": "vLargeTextField"}),
+            "body": forms.Textarea(attrs={"rows": 10, "placeholder": "Full educational content body...", "class": "vLargeTextField"}),
+            "emergency_disclaimer": forms.Textarea(attrs={"rows": 2, "class": "vLargeTextField"}),
+            "effective_from": forms.DateInput(attrs={"type": "date", "class": "vDateField"}),
+            "expires_on": forms.DateInput(attrs={"type": "date", "class": "vDateField"}),
+        }
+
+    def clean_slug(self):
+        slug = (self.cleaned_data.get("slug") or "").strip().lower()
+        if not slug:
+            raise forms.ValidationError("Slug is required.")
+        qs = HealthContent.objects.filter(slug__iexact=slug)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError(f"Health content with slug '{slug}' already exists.")
+        return slug
+
+    def clean(self):
+        cleaned_data = super().clean()
+        effective_from = cleaned_data.get("effective_from")
+        expires_on = cleaned_data.get("expires_on")
+        if effective_from and expires_on and expires_on < effective_from:
+            raise forms.ValidationError({"expires_on": "Expiry date must be on or after effective from date."})
         return cleaned_data

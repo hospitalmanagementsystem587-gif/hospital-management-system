@@ -13,6 +13,7 @@ from .forms import (
     DepartmentForm,
     DiagnosticTestForm,
     DoctorScheduleForm,
+    HealthContentForm,
     HealthPackageForm,
     HospitalSettingsForm,
     ServiceForm,
@@ -557,17 +558,62 @@ class HealthPackageAdmin(admin.ModelAdmin):
 
 @admin.register(HealthContent)
 class HealthContentAdmin(admin.ModelAdmin):
-    list_display = ("title", "version", "status", "reviewer", "effective_from", "expires_on")
-    list_filter = ("status", "language", "audience")
-    search_fields = ("title", "summary", "body")
+    form = HealthContentForm
+    list_display = (
+        "title",
+        "slug",
+        "category",
+        "version",
+        "status",
+        "author",
+        "reviewer",
+        "effective_from",
+        "expires_on",
+    )
+    list_filter = ("status", "category", "language", "audience", "effective_from")
+    search_fields = ("title", "slug", "summary", "body", "category")
     readonly_fields = ("reviewed_at",)
+    ordering = ("-effective_from", "title")
+
+    fieldsets = (
+        (
+            "Article Identity & SEO",
+            {
+                "fields": ("slug", "title", "category", "audience", "language", "version"),
+                "description": "Unique URL identifier, publication headline, demographic audience, and versioning.",
+            },
+        ),
+        (
+            "Educational Body & Clinical Guidance",
+            {
+                "fields": ("summary", "body", "key_takeaways", "references", "emergency_disclaimer"),
+                "description": "Patient-facing summary, rich educational copy, evidence references, and emergency caution disclaimers.",
+            },
+        ),
+        (
+            "Governance & Clinical Approval Workflow",
+            {
+                "fields": ("status", "effective_from", "expires_on", "author", "reviewer", "reviewed_at"),
+                "description": "Publishing lifecycle. Only clinicians with publishing permission can transition status to Published.",
+            },
+        ),
+        (
+            "AI Provenance & Audit Metadata",
+            {
+                "fields": ("ai_provider", "ai_model", "ai_prompt_version"),
+                "classes": ("collapse",),
+                "description": "Optional audit logs for content assisted by approved medical LLM pipelines.",
+            },
+        ),
+    )
 
     def save_model(self, request, obj, form, change):
         if obj.status == HealthContent.Status.PUBLISHED:
             if not request.user.has_perm("core.publish_healthcontent"):
                 from django.core.exceptions import PermissionDenied
                 raise PermissionDenied("Clinical publishing permission is required.")
-            obj.reviewer = request.user
+            if not obj.reviewer:
+                obj.reviewer = request.user
             obj.reviewed_at = timezone.now()
         super().save_model(request, obj, form, change)
 
