@@ -103,6 +103,7 @@ class DoctorSerializer(serializers.ModelSerializer):
     review_count = serializers.SerializerMethodField()
     specialties = serializers.SerializerMethodField()
     primary_specialty = serializers.SerializerMethodField()
+    available_schedules = serializers.SerializerMethodField()
 
     class Meta:
         model = StaffProfile
@@ -124,6 +125,22 @@ class DoctorSerializer(serializers.ModelSerializer):
             "review_count",
             "specialties",
             "primary_specialty",
+            "available_schedules",
+        ]
+
+    def get_available_schedules(self, obj):
+        return [
+            {
+                "id": s.id,
+                "weekday": s.weekday,
+                "weekday_name": s.get_weekday_display(),
+                "start_time": s.start_time.strftime("%H:%M"),
+                "end_time": s.end_time.strftime("%H:%M"),
+                "opd_room": s.opd_room,
+                "slot_duration_minutes": s.slot_duration_minutes,
+                "max_patients": s.max_patients,
+            }
+            for s in obj.schedules.filter(is_active=True).order_by("weekday", "start_time")
         ]
 
     def get_specialties(self, obj):

@@ -20,6 +20,7 @@ from .models import (
     PrescriptionItem,
     Specialty,
     StaffProfile,
+    DoctorSchedule,
     VisitType,
 )
 from .services.documents import inspect_patient_document_upload
@@ -621,3 +622,58 @@ class StaffProfileForm(forms.ModelForm):
         if qs.exists():
             raise forms.ValidationError(f"Staff profile with Employee ID '{emp_id}' already exists.")
         return emp_id
+
+
+class DoctorScheduleForm(forms.ModelForm):
+    """Administrator CMS form for managing recurring doctor OPD schedules."""
+
+    class Meta:
+        model = DoctorSchedule
+        fields = (
+            "doctor",
+            "weekday",
+            "start_time",
+            "end_time",
+            "opd_room",
+            "slot_duration_minutes",
+            "max_patients",
+            "is_active",
+        )
+        widgets = {
+            "start_time": forms.TimeInput(attrs={"type": "time", "class": "vTimeField"}),
+            "end_time": forms.TimeInput(attrs={"type": "time", "class": "vTimeField"}),
+            "opd_room": forms.TextInput(attrs={"placeholder": "e.g. OPD Room 204", "class": "vTextField"}),
+            "slot_duration_minutes": forms.NumberInput(attrs={"class": "vIntegerField", "min": 5, "max": 120}),
+            "max_patients": forms.NumberInput(attrs={"class": "vIntegerField", "min": 1, "max": 200}),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        doctor = cleaned_data.get("doctor")
+        weekday = cleaned_data.get("weekday")
+        start_time = cleaned_data.get("start_time")
+        end_time = cleaned_data.get("end_time")
+        is_active = cleaned_data.get("is_active", True)
+
+        if start_time and end_time:
+            if start_time >= end_time:
+                raise forms.ValidationError({"end_time": "Session end time must be strictly after start time."})
+
+            if doctor and weekday is not None and is_active:
+                # Check for overlapping active schedules for the same doctor on the same weekday
+                conflicts = DoctorSchedule.objects.filter(
+                    doctor=doctor,
+                    weekday=weekday,
+                    is_active=True,
+                )
+                if self.instance.pk:
+                    conflicts = conflicts.exclude(pk=self.instance.pk)
+
+                # Overlap condition: start_time < existing.end_time and end_time > existing.start_time
+                for conflict in conflicts:
+                    if start_time < conflict.end_time and end_time > conflict.start_time:
+                        raise forms.ValidationError(
+                            f"Schedule conflict: Doctor already has an active session on {conflict.get_weekday_display()} "
+                            f"from {conflict.start_time.strftime('%H:%M')} to {conflict.end_time.strftime('%H:%M')}."
+                        )
+        return cleaned_data

@@ -9,12 +9,19 @@ from django.db.models import Sum
 from django.shortcuts import redirect
 from django.utils import timezone
 
-from .forms import DepartmentForm, HospitalSettingsForm, SpecialtyForm, StaffProfileForm
+from .forms import (
+    DepartmentForm,
+    DoctorScheduleForm,
+    HospitalSettingsForm,
+    SpecialtyForm,
+    StaffProfileForm,
+)
 from .models import (
     Admission,
     Appointment,
     Bed,
     Department,
+    DoctorSchedule,
     DoctorSpecialty,
     HospitalFacility,
     HospitalFaq,
@@ -141,6 +148,51 @@ class DoctorSpecialtyInline(admin.TabularInline):
     fields = ("specialty", "is_primary")
 
 
+class DoctorScheduleInline(admin.TabularInline):
+    model = DoctorSchedule
+    form = DoctorScheduleForm
+    extra = 1
+    fields = (
+        "weekday",
+        "start_time",
+        "end_time",
+        "opd_room",
+        "slot_duration_minutes",
+        "max_patients",
+        "is_active",
+    )
+
+
+@admin.register(DoctorSchedule)
+class DoctorScheduleAdmin(admin.ModelAdmin):
+    form = DoctorScheduleForm
+    list_display = (
+        "doctor",
+        "weekday_name",
+        "start_time",
+        "end_time",
+        "opd_room",
+        "slot_duration_minutes",
+        "max_patients",
+        "is_active",
+        "updated_at",
+    )
+    list_editable = ("is_active",)
+    list_filter = ("is_active", "weekday", "doctor__department")
+    search_fields = (
+        "doctor__employee_id",
+        "doctor__user__first_name",
+        "doctor__user__last_name",
+        "opd_room",
+    )
+    ordering = ("weekday", "start_time")
+
+    def weekday_name(self, obj):
+        return obj.get_weekday_display()
+    weekday_name.short_description = "Day of Week"
+    weekday_name.admin_order_field = "weekday"
+
+
 @admin.register(DoctorSpecialty)
 class DoctorSpecialtyAdmin(admin.ModelAdmin):
     list_display = ("doctor", "specialty", "is_primary", "updated_at")
@@ -158,7 +210,7 @@ class DoctorSpecialtyAdmin(admin.ModelAdmin):
 @admin.register(StaffProfile)
 class StaffProfileAdmin(admin.ModelAdmin):
     form = StaffProfileForm
-    inlines = [DoctorSpecialtyInline]
+    inlines = [DoctorSpecialtyInline, DoctorScheduleInline]
     list_display = (
         "employee_id",
         "user_full_name",

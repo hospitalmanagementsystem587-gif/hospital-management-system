@@ -110,6 +110,10 @@ class DoctorManagementCMSTests(TestCase):
             "doctor_specialties-INITIAL_FORMS": "0",
             "doctor_specialties-MIN_NUM_FORMS": "0",
             "doctor_specialties-MAX_NUM_FORMS": "1000",
+            "schedules-TOTAL_FORMS": "0",
+            "schedules-INITIAL_FORMS": "0",
+            "schedules-MIN_NUM_FORMS": "0",
+            "schedules-MAX_NUM_FORMS": "1000",
             "_save": "Save",
         }
         response = self.client.post(change_url, data=payload, follow=True, HTTP_HOST="admin.hms.test")

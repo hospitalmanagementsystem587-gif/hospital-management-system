@@ -116,6 +116,70 @@ class DoctorSpecialty(TimestampedModel):
         return f"{self.doctor} - {self.specialty}{primary_suffix}"
 
 
+class DoctorSchedule(TimestampedModel):
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, "Monday"
+        TUESDAY = 1, "Tuesday"
+        WEDNESDAY = 2, "Wednesday"
+        THURSDAY = 3, "Thursday"
+        FRIDAY = 4, "Friday"
+        SATURDAY = 5, "Saturday"
+        SUNDAY = 6, "Sunday"
+
+    doctor = models.ForeignKey(
+        StaffProfile,
+        on_delete=models.CASCADE,
+        related_name="schedules",
+    )
+    weekday = models.IntegerField(
+        choices=Weekday.choices,
+        help_text="Day of the week for recurring clinic availability (0=Monday, 6=Sunday).",
+    )
+    start_time = models.TimeField(help_text="Session start time in hospital local time.")
+    end_time = models.TimeField(help_text="Session end time in hospital local time.")
+    opd_room = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="Optional room or clinical chamber for this session.",
+    )
+    slot_duration_minutes = models.PositiveSmallIntegerField(
+        default=15,
+        help_text="Duration per appointment slot in minutes.",
+    )
+    max_patients = models.PositiveSmallIntegerField(
+        default=20,
+        help_text="Maximum appointment capacity for this session.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Whether this recurring schedule is active.",
+    )
+
+    class Meta:
+        verbose_name = "Doctor Schedule"
+        verbose_name_plural = "Doctor Schedules"
+        ordering = ["weekday", "start_time"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_time__gt=models.F("start_time")),
+                name="doctor_schedule_valid_time_range",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["doctor", "weekday", "is_active"], name="doc_sched_day_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.doctor} · {self.get_weekday_display()} ({self.start_time.strftime('%H:%M')} - {self.end_time.strftime('%H:%M')})"
+
+    def clean(self):
+        super().clean()
+        if self.start_time and self.end_time and self.start_time >= self.end_time:
+            from django.core.exceptions import ValidationError
+            raise ValidationError("End time must be after start time.")
+
+
 class HospitalSettings(TimestampedModel):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     name = models.CharField(max_length=200)
