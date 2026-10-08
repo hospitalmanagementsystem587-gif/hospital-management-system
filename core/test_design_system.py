@@ -181,8 +181,8 @@ class SharedDesignSystemTests(TestCase):
         self.assertIn('href="/reset/"', rendered)
         self.assertIn("Clear search", rendered)
 
-    def test_card_component_rendering(self):
-        """Assert card component renders header, body, and footer."""
+    def test_card_component_escapes_content_by_default(self):
+        """Assert cards render metadata while escaping untrusted body and footer HTML."""
         rendered = render_to_string(
             "core/components/card.html",
             {
@@ -199,8 +199,10 @@ class SharedDesignSystemTests(TestCase):
         self.assertIn("Analytics", rendered)
         self.assertIn("Overview of admissions", rendered)
         self.assertIn("Updated", rendered)
-        self.assertIn("<p>Body content</p>", rendered)
-        self.assertIn("Last updated today", rendered)
+        self.assertIn("&lt;p&gt;Body content&lt;/p&gt;", rendered)
+        self.assertIn("&lt;span&gt;Last updated today&lt;/span&gt;", rendered)
+        self.assertNotIn("<p>Body content</p>", rendered)
+        self.assertNotIn("<span>Last updated today</span>", rendered)
 
     def test_pagination_component_rendering(self):
         """Assert pagination component renders accessible nav, controls, and page indicator."""
