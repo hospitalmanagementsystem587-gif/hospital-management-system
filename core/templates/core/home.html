@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 
-{% block title %}{{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+{% block title %}{% if seo_is_indexable %}{{ seo_title }}{% else %}{{ hospital.name|default:"Vedant Hospital" }}{% endif %}{% endblock %}
 
 {% block content %}
 {% if user.is_authenticated %}
@@ -274,7 +274,7 @@
 <section class="public-hero">
   <div class="public-hero-copy">
     <div class="public-kicker"><span class="status-indicator"></span>Secure staff workspace</div>
-    <h1>Clinical operations,<br><span>clear and connected.</span></h1>
+    <h1>{% if hospital.name and hospital.name != 'Hospital name not configured' %}{{ hospital.name }}{% else %}Vedant Hospital{% endif %}: connected hospital care in Lucknow</h1>
     <p>One secure workspace for patient registration, appointments, consultations, pharmacy dispensing, and billing at {% if hospital.name and hospital.name != 'Hospital name not configured' %}{{ hospital.name }}{% else %}Vedant Hospital{% endif %}.</p>
     <div class="public-actions">
       <a href="{% url 'login' %}" class="btn-stitch-primary public-primary-action">

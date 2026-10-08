@@ -62,6 +62,26 @@ deploying.
 `CSRF_TRUSTED_ORIGINS` should include every origin that proxies requests to the
 Django origin (e.g. Cloudflare Pages). Set via `DJANGO_CSRF_TRUSTED_ORIGINS`.
 
+### Public SEO and HTTPS
+
+Set `PUBLIC_SITE_URL` to the canonical public origin (for example,
+`https://www.example.com`). Canonical, sitemap, structured-data, and social
+preview URLs use this configured value and never trust the inbound Host header.
+The public sitemap is available at `/sitemap.xml`; `/robots.txt` references it
+and excludes private application routes. Set `GOOGLE_SITE_VERIFICATION` only to
+the token issued for the production property by Google Search Console.
+
+After HTTPS is working end-to-end through the trusted proxy, enable
+`DJANGO_SECURE_SSL_REDIRECT`. Introduce HSTS gradually with
+`DJANGO_SECURE_HSTS_SECONDS`; enable subdomains/preload only after confirming
+that every subdomain supports HTTPS. `SECURE_PROXY_SSL_HEADER` expects the
+trusted proxy to replace, rather than append to, `X-Forwarded-Proto`.
+
+Search Console operations remain deployment tasks: verify the production URL,
+submit `<PUBLIC_SITE_URL>/sitemap.xml`, inspect the homepage, and monitor Page
+Indexing, Core Web Vitals, impressions, clicks, CTR, and query position. Code
+readiness does not guarantee indexing or ranking.
+
 For PostgreSQL, use a URL such as:
 
 ```dotenv

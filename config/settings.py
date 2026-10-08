@@ -1,5 +1,7 @@
 import os
+from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import dj_database_url
 from dotenv import load_dotenv
@@ -52,6 +54,15 @@ CSRF_TRUSTED_ORIGINS = [
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
+# Public-origin SEO and transport policy. PUBLIC_SITE_URL is deliberately
+# configured rather than derived from Host headers so canonical and social URLs
+# cannot be poisoned by an inbound request.
+PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL", "http://testserver").rstrip("/")
+if not urlsplit(PUBLIC_SITE_URL).scheme or not urlsplit(PUBLIC_SITE_URL).netloc:
+    raise RuntimeError("PUBLIC_SITE_URL must be an absolute URL, for example https://example.com")
+GOOGLE_SITE_VERIFICATION = os.getenv("GOOGLE_SITE_VERIFICATION", "").strip()
+DEFAULT_OG_IMAGE_PATH = "core/stitch_preview.png"
+
 INSTALLED_APPS = [
     "core",
     "rest_framework",
@@ -63,6 +74,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sitemaps",
 ]
 
 MIDDLEWARE = [
@@ -72,6 +84,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.seo.NoIndexPrivateResponsesMiddleware",
     "core.portal.middleware.PortalRoutingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -161,6 +174,12 @@ CSRF_COOKIE_DOMAIN = os.getenv("DJANGO_CSRF_COOKIE_DOMAIN", None) or None
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", default=False)
+SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_SECURE_HSTS_SECONDS", "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False
+)
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", default=False)
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "/"
@@ -194,8 +213,6 @@ if SENTRY_DSN:
         send_default_pii=False,
         environment=os.getenv("APP_ENV", "staging" if not DEBUG else "development"),
     )
-
-from datetime import timedelta
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (

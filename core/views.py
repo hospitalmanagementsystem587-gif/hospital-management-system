@@ -3,6 +3,7 @@ from datetime import timedelta
 import uuid
 
 from django.contrib import messages
+from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
@@ -182,6 +183,26 @@ def home(request):
 
 def health(request):
     return JsonResponse({"status": "ok"})
+
+
+def robots_txt(request):
+    sitemap_url = f"{settings.PUBLIC_SITE_URL}/sitemap.xml"
+    lines = [
+        "User-agent: *",
+        "Allow: /$",
+        "Disallow: /admin/",
+        "Disallow: /accounts/",
+        "Disallow: /api/",
+        "Disallow: /patients/",
+        "Disallow: /appointments/",
+        "Disallow: /consultations/",
+        "Disallow: /prescriptions/",
+        "Disallow: /pharmacy/",
+        "Disallow: /invoices/",
+        "Disallow: /ipd/",
+        f"Sitemap: {sitemap_url}",
+    ]
+    return HttpResponse("\n".join(lines) + "\n", content_type="text/plain; charset=utf-8")
 
 
 def _has_role(user, role):
