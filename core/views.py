@@ -194,7 +194,7 @@ def _patient_read_queryset(user):
     patients = get_authorized_patient_queryset(user)
     if user.is_superuser or (
         StaffProfile.objects.filter(user=user).exists()
-        and user.groups.filter(name__in=("Reception", "Doctor")).exists()
+        and user.groups.filter(name__in=("Reception", "Doctor", "Administrator")).exists()
     ):
         return patients
     raise PermissionDenied
@@ -650,7 +650,7 @@ def patient_list(request):
         {
             "patients": patients.order_by("full_name", "mrn"),
             "query": query,
-            "can_register": _has_role(request.user, "Reception"),
+            "can_register": _has_role(request.user, "Reception") or _has_role(request.user, "Administrator"),
         },
     )
 
@@ -658,7 +658,7 @@ def patient_list(request):
 @permission_required("core.add_patient", raise_exception=True)
 def patient_create(request):
     if (
-        not _has_role(request.user, "Reception")
+        not (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
@@ -697,16 +697,18 @@ def patient_create(request):
 @permission_required("core.view_patient", raise_exception=True)
 def patient_detail(request, pk):
     patient = get_object_or_404(_patient_read_queryset(request.user), pk=pk)
-    can_bill = _has_role(request.user, "Reception")
-    can_upload_docs = _has_role(request.user, "Reception") or _has_role(
-        request.user, "Administrator"
-    ) or _has_role(request.user, "Doctor")
+    can_bill = _has_role(request.user, "Reception") or _has_role(request.user, "Administrator")
+    can_upload_docs = (
+        _has_role(request.user, "Reception")
+        or _has_role(request.user, "Administrator")
+        or _has_role(request.user, "Doctor")
+    )
     return render(
         request,
         "core/patients/detail.html",
         {
             "patient": patient,
-            "can_edit": _has_role(request.user, "Reception"),
+            "can_edit": _has_role(request.user, "Reception") or _has_role(request.user, "Administrator"),
             "can_view_clinical": _has_role(request.user, "Doctor"),
             "can_bill": can_bill,
             "can_upload_docs": can_upload_docs,
@@ -726,7 +728,7 @@ def patient_detail(request, pk):
 @permission_required("core.change_patient", raise_exception=True)
 def patient_update(request, pk):
     if (
-        not _has_role(request.user, "Reception")
+        not (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
