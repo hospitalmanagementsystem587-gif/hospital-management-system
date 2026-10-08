@@ -8,6 +8,7 @@ from .models import (
     Appointment,
     Bed,
     Consultation,
+    HospitalSettings,
     InpatientDeposit,
     Patient,
     PatientDocument,
@@ -366,4 +367,86 @@ class DischargeForm(forms.ModelForm):
                 attrs={"class": "clinical-input"},
             ),
         }
+
+
+class HospitalSettingsForm(forms.ModelForm):
+    """Administrator CMS form for managing the canonical hospital profile and settings."""
+
+    class Meta:
+        model = HospitalSettings
+        fields = (
+            "name",
+            "tagline",
+            "timezone",
+            "currency_code",
+            "phone",
+            "emergency_phone",
+            "emergency_phone_display",
+            "ambulance_phone",
+            "ambulance_phone_display",
+            "reception_phone",
+            "reception_phone_display",
+            "email",
+            "address",
+            "landmark",
+            "city",
+            "maps_query",
+        )
+        widgets = {
+            "name": forms.TextInput(attrs={"placeholder": "e.g. Vedant Hospital", "class": "vTextField"}),
+            "tagline": forms.TextInput(attrs={"placeholder": "e.g. Multi-Speciality Care & 24x7 Emergency", "class": "vTextField"}),
+            "timezone": forms.TextInput(attrs={"placeholder": "Asia/Kolkata", "class": "vTextField"}),
+            "currency_code": forms.TextInput(attrs={"placeholder": "INR", "maxlength": "3", "class": "vTextField"}),
+            "phone": forms.TextInput(attrs={"placeholder": "+91 94150 12345", "class": "vTextField"}),
+            "emergency_phone": forms.TextInput(attrs={"placeholder": "102", "class": "vTextField"}),
+            "emergency_phone_display": forms.TextInput(attrs={"placeholder": "102 / 108", "class": "vTextField"}),
+            "ambulance_phone": forms.TextInput(attrs={"placeholder": "108", "class": "vTextField"}),
+            "ambulance_phone_display": forms.TextInput(attrs={"placeholder": "108", "class": "vTextField"}),
+            "reception_phone": forms.TextInput(attrs={"placeholder": "+91 522 2418900", "class": "vTextField"}),
+            "reception_phone_display": forms.TextInput(attrs={"placeholder": "+91 (0522) 2418900", "class": "vTextField"}),
+            "email": forms.EmailInput(attrs={"placeholder": "contact@hospital.com", "class": "vTextField"}),
+            "address": forms.Textarea(attrs={"rows": 3, "placeholder": "Hospital street address...", "class": "vLargeTextField"}),
+            "landmark": forms.TextInput(attrs={"placeholder": "e.g. Near Kanpur Ring Road", "class": "vTextField"}),
+            "city": forms.TextInput(attrs={"placeholder": "e.g. Lucknow, Uttar Pradesh", "class": "vTextField"}),
+            "maps_query": forms.TextInput(attrs={"placeholder": "e.g. Vedant Hospital, Hardoi Road, Lucknow", "class": "vTextField"}),
+        }
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if not name:
+            raise forms.ValidationError("This field is required.")
+        return name
+
+    def clean_timezone(self):
+        import zoneinfo
+        tz = (self.cleaned_data.get("timezone") or "").strip()
+        if tz:
+            try:
+                zoneinfo.ZoneInfo(tz)
+            except Exception:
+                raise forms.ValidationError(f"'{tz}' is not a valid IANA time zone identifier (e.g. Asia/Kolkata).")
+        return tz
+
+    def clean_currency_code(self):
+        curr = (self.cleaned_data.get("currency_code") or "").strip().upper()
+        if not curr:
+            return "INR"
+        if len(curr) != 3 or not curr.isalpha():
+            raise forms.ValidationError("Currency code must be a 3-letter ISO code (e.g. INR, USD).")
+        return curr
+
+    def clean_phone(self):
+        return (self.cleaned_data.get("phone") or "").strip()
+
+    def clean_emergency_phone(self):
+        return (self.cleaned_data.get("emergency_phone") or "").strip()
+
+    def clean_ambulance_phone(self):
+        return (self.cleaned_data.get("ambulance_phone") or "").strip()
+
+    def clean_reception_phone(self):
+        return (self.cleaned_data.get("reception_phone") or "").strip()
+
+    def clean_email(self):
+        return (self.cleaned_data.get("email") or "").strip()
 

@@ -4,8 +4,10 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin
 from django.db.models import Sum
+from django.shortcuts import redirect
 from django.utils import timezone
 
+from .forms import HospitalSettingsForm
 from .models import (
     Admission,
     Appointment,
@@ -137,10 +139,56 @@ class StaffProfileAdmin(admin.ModelAdmin):
 
 @admin.register(HospitalSettings)
 class HospitalSettingsAdmin(admin.ModelAdmin):
+    form = HospitalSettingsForm
+    list_display = ("name", "city", "phone", "emergency_phone_display", "email", "updated_at")
+
+    fieldsets = (
+        (
+            "Hospital Identity",
+            {
+                "fields": ("name", "tagline"),
+                "description": "Primary organizational identity displayed across portal navigation, branding banners, and patient records.",
+            },
+        ),
+        (
+            "Localization & Regional Settings",
+            {
+                "fields": ("timezone", "currency_code"),
+                "description": "Standard IANA timezone (e.g. Asia/Kolkata) and 3-letter currency code (e.g. INR) for clinical scheduling and revenue operations.",
+            },
+        ),
+        (
+            "Emergency & Clinical Contacts",
+            {
+                "fields": (
+                    "emergency_phone",
+                    "emergency_phone_display",
+                    "ambulance_phone",
+                    "ambulance_phone_display",
+                    "reception_phone",
+                    "reception_phone_display",
+                ),
+                "description": "Critical emergency numbers for public banners, mobile emergency dialers, and triage intake.",
+            },
+        ),
+        (
+            "General Communications & Location",
+            {
+                "fields": ("phone", "email", "address", "landmark", "city", "maps_query"),
+                "description": "Hospital physical address, primary public telephone, inquiries email, and map location query.",
+            },
+        ),
+    )
+
+    def changelist_view(self, request, extra_context=None):
+        """Redirect directly to the canonical singleton profile change form."""
+        obj = HospitalSettings.objects.filter(pk=1).first()
+        if obj:
+            return redirect("admin:core_hospitalsettings_change", obj.pk)
+        return redirect("admin:core_hospitalsettings_add")
+
     def has_add_permission(self, request):
-        return not HospitalSettings.objects.exists() and super().has_add_permission(
-            request
-        )
+        return not HospitalSettings.objects.exists() and super().has_add_permission(request)
 
     def has_delete_permission(self, request, obj=None):
         return False
