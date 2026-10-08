@@ -98,7 +98,7 @@ class DoctorSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     department_name = serializers.CharField(source="department.name", read_only=True)
     department_code = serializers.CharField(source="department.code", read_only=True)
-    consultation_fee = serializers.IntegerField(read_only=True)
+    consultation_fee = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
     specialties = serializers.SerializerMethodField()
@@ -127,6 +127,10 @@ class DoctorSerializer(serializers.ModelSerializer):
             "primary_specialty",
             "available_schedules",
         ]
+
+    def get_consultation_fee(self, obj):
+        price = obj.get_consultation_price(scope="initial")
+        return int(price)
 
     def get_available_schedules(self, obj):
         return [

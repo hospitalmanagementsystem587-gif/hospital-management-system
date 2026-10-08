@@ -83,6 +83,38 @@ class StaffProfile(TimestampedModel):
         display_name = self.user.get_full_name() or self.user.get_username()
         return f"{display_name} · {self.employee_id}"
 
+    def get_consultation_price(self, scope="initial", as_of=None):
+        """Resolves effective consultation price for this doctor using canonical pricing hierarchy:
+        1. Doctor-specific canonical Price (scope: 'initial' or 'follow_up' or 'standard')
+        2. Doctor primary specialty Price
+        3. System default (legacy StaffProfile.consultation_fee)
+        """
+        if as_of is None:
+            as_of = timezone.localdate()
+
+        # 1. Doctor-specific price with requested scope, falling back to standard
+        price = Price.get_current_price(self, scope=scope, as_of=as_of, price_type=Price.PriceType.CONSULTATION)
+        if not price and scope != "standard":
+            price = Price.get_current_price(self, scope="standard", as_of=as_of, price_type=Price.PriceType.CONSULTATION)
+        if price:
+            return price.amount
+
+        # 2. Doctor primary specialty price
+        primary_spec = getattr(self, "primary_specialty", None)
+        if not primary_spec:
+            primary_rel = self.doctor_specialties.filter(is_primary=True).select_related("specialty").first()
+            if primary_rel:
+                primary_spec = primary_rel.specialty
+        if primary_spec:
+            spec_price = Price.get_current_price(primary_spec, scope=scope, as_of=as_of, price_type=Price.PriceType.CONSULTATION)
+            if not spec_price and scope != "standard":
+                spec_price = Price.get_current_price(primary_spec, scope="standard", as_of=as_of, price_type=Price.PriceType.CONSULTATION)
+            if spec_price:
+                return spec_price.amount
+
+        # 3. Fallback to consultation_fee on StaffProfile
+        return Decimal(str(self.consultation_fee or 0))
+
 
 class DoctorSpecialty(TimestampedModel):
     doctor = models.ForeignKey(
