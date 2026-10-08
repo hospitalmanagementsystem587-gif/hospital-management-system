@@ -19,6 +19,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.contrib.auth.models import Permission
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -162,6 +163,20 @@ class AdminManagementDashboardTests(TestCase):
         response = self.client.get("/admin/", HTTP_HOST="admin.hms.test")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Apollo General Hospital")
+
+    def test_management_links_follow_model_permissions(self):
+        """Quick actions are rendered only when Django grants the matching model permission."""
+        self.client.force_login(self.staff_admin)
+        response = self.client.get("/admin/", HTTP_HOST="admin.hms.test")
+        self.assertNotContains(response, 'href="/admin/core/department/"')
+        self.assertNotContains(response, 'href="/admin/core/patientfeedback/"')
+
+        self.staff_admin.user_permissions.add(
+            Permission.objects.get(content_type__app_label="core", codename="view_department")
+        )
+        response = self.client.get("/admin/", HTTP_HOST="admin.hms.test")
+        self.assertContains(response, 'href="/admin/core/department/"')
+        self.assertNotContains(response, 'href="/admin/core/patientfeedback/"')
 
     def test_wrong_portal_fail_closed_behavior(self):
         """Admin dashboard is only served on the admin portal; other portals maintain their boundaries."""

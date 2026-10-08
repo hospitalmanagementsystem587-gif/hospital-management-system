@@ -1,10 +1,10 @@
 # KAN-39 Completion Report — Admin Management Dashboard
- 
-**Date:** 2026-10-08  
-**Ticket:** KAN-39 (Admin Management Dashboard)  
-**Branch:** `codex/kan-39-admin-management-dashboard`  
-**Base Commit (KAN-38):** `aa35071a4d0b5ade960402065e2d34dd6569a547`  
-**Status:** Completed and Verified  
+
+**Date:** 2026-10-08
+**Ticket:** KAN-39 (Admin Management Dashboard)
+**Branch:** `codex/kan-39-admin-management-dashboard`
+**Base Commit (KAN-38):** `aa35071a4d0b5ade960402065e2d34dd6569a547`
+**Status:** Completed and Verified
 
 ---
 
@@ -26,7 +26,7 @@ The dashboard strictly protects patient privacy: only high-level numerical summa
 | **AC 2: Executive Management KPI Grid** | Satisfied | Displays server-side computed aggregates: Total Active Patients (EMR), Today's Scheduled Appointments (OPD), Today's Collections (₹ audited payments), and Active Inpatient Admissions (IPD). |
 | **AC 3: Operational & Department Summaries** | Satisfied | Summarizes IPD bed occupancy (occupied vs. available vs. total), billing & revenue (collections, refunds issued, unsettled invoices), pharmacy health (low stock batches `<10` units, expired quarantine alerts, active e-Rx), and QA feedback moderation queue. |
 | **AC 4: Graceful Empty-State Degradation** | Satisfied | Empty database states render safe defaults (`0`, `₹0.00`) without errors, division-by-zero, or missing variable crashes. Renders the KAN-38 `empty_state.html` component when no beds are configured. |
-| **AC 5: Authorized Management Directory Links** | Satisfied | Provides keyboard-accessible, direct links to currently registered Django admin changelists (`Staff Profiles`, `Departments`, `Hospital Services`, `Health Packages`, `Medicines Directory`, `Suppliers`, `Patient Feedback`, `Hospital Settings`, `User Accounts`, `Groups & Permissions`). No links to unbuilt KAN-40+ screens. |
+| **AC 5: Authorized Management Directory Links** | Satisfied | Provides keyboard-accessible links to registered Django admin changelists only when the current user has the corresponding Django model permission. No links to unbuilt KAN-40+ screens. |
 | **AC 6: Reusable Design System Tokens & Components** | Satisfied | Integrates KAN-38 cards (`hms-card`), status pill badges (`hms-badge`, `badge.html`), empty states (`empty_state.html`), and tokens (`--color-surface`, `--color-primary`, `--radius-xl`, `--font-sans`). Supports mobile responsiveness down to 320px viewport without horizontal overflow. |
 | **AC 7: Accessibility & Security** | Satisfied | Semantic headings (`h1` -> `h2` -> `h3`), landmark sections (`aria-labelledby`), visible focus states, decorative icons hidden with `aria-hidden="true"`, tabular numerals (`font-variant-numeric: tabular-nums`), and strict automatic HTML escaping for user-controlled hospital strings. |
 | **AC 8: Query Count & Performance** | Satisfied | Aggregates and counts execute via single-query `.count()` and `.aggregate(total=Sum(...))`. No full querysets or unnecessary model instances are loaded into memory. Query count across full dashboard rendering is strictly bounded (25 queries). |
@@ -40,7 +40,7 @@ The dashboard strictly protects patient privacy: only high-level numerical summa
 | `core/admin.py` | Modified | Overrode `admin.site.index` to compute executive KPIs and operational summaries server-side, passing `kpis` and `today` into the admin index template context. |
 | `core/templates/admin/index.html` | Created | Customized Django admin index view extending `admin/base_site.html`. Houses the executive hero banner, KPI grid, operational cards, quick registry navigation, and standard app list. |
 | `core/static/core/style.css` | Modified | Added responsive CSS styles for the admin dashboard hero, KPI cards, operational breakdown grid, quick link cards, and stat rows using KAN-38 tokens. |
-| `core/test_admin_dashboard.py` | Created | 10 comprehensive unit and integration tests covering authentication, authorization, wrong-portal denial, metric correctness, empty states, design system inheritance, XSS escaping, and query count bounds. |
+| `core/test_admin_dashboard.py` | Created | 11 comprehensive unit and integration tests covering authentication, authorization, permission-gated management links, wrong-portal denial, metric correctness, empty states, design system inheritance, XSS escaping, and query count bounds. |
 | `agent-bridge/to-claude/kan-39-completion.md` | Created | This completion report. |
 
 ---
@@ -58,6 +58,7 @@ The dashboard strictly protects patient privacy: only high-level numerical summa
 ### Security Findings
 - **Server-Side Enforcement:** Portal boundaries are enforced in `PortalRoutingMiddleware` and `admin.site.has_permission`.
 - **Fail-Closed Protection:** Authenticated non-staff roles cannot view metrics or change lists; anonymous requests redirect to login.
+- **Fine-Grained Navigation:** Management links are rendered only when the current user has the matching Django model permission; destination views continue to enforce the same permissions server-side.
 - **XSS Immunity:** Malicious script tags injected in singleton strings (e.g., `HospitalSettings.name`) are escaped (`&lt;script&gt;`). No `|safe` filter is used on user-controlled text.
 - **Privacy Minimization:** No clinical notes, diagnoses, or individual patient identities are displayed on the executive overview.
 - **Android Compatibility:** Android `/api/v1/` endpoints remain unaffected.
@@ -74,18 +75,18 @@ The dashboard strictly protects patient privacy: only high-level numerical summa
 
 | Check / Test Suite | Exact Command | Results |
 |---|---|---|
-| Django System Check | `.venv/bin/python manage.py check` | `System check identified no issues (0 silenced).` |
-| Migration Drift Check | `.venv/bin/python manage.py makemigrations --check --dry-run` | `No changes detected` |
+| Django System Check | `DEBUG=True DJANGO_SECRET_KEY='<test-only-secret>' <shared-venv>/bin/python manage.py check` | `System check identified no issues (0 silenced).` |
+| Migration Drift Check | `DEBUG=True DJANGO_SECRET_KEY='<test-only-secret>' <shared-venv>/bin/python manage.py makemigrations --check --dry-run` | `No changes detected` |
 | Collectstatic Check | `.venv/bin/python manage.py collectstatic --noinput` | `1 static file copied, 157 unmodified, 412 post-processed.` |
-| KAN-39 Dashboard Tests | `.venv/bin/python manage.py test core.test_admin_dashboard -v 2` | `Ran 10 tests in 0.943s. OK` |
-| KAN-35–39 Portal Test Suite | `.venv/bin/python manage.py test core.test_portal_architecture core.test_shared_auth_session core.test_portal_authorization core.test_design_system core.test_admin_dashboard -v 1` | `Ran 53 tests in 5.334s. OK` |
+| KAN-39 Dashboard Tests | `DEBUG=True DJANGO_SECRET_KEY='<test-only-secret>' <shared-venv>/bin/python manage.py test core.test_admin_dashboard -v 1` | Included in focused run; 11 KAN-39 tests passed. |
+| KAN-35–39 Portal Test Suite | `DEBUG=True DJANGO_SECRET_KEY='<test-only-secret>' <shared-venv>/bin/python manage.py test core.test_admin_dashboard core.test_portal_architecture core.test_shared_auth_session core.test_portal_authorization core.test_design_system -v 1` | `Ran 54 tests in 5.579s. OK` |
 | Auth & Android API Regressions | `.venv/bin/python manage.py test core.test_patient_api.PatientApiTests.test_token_refresh_and_blacklisting_revocation core.test_patient_api.PatientApiTests.test_logout_all_devices core.test_patient_api.PatientApiTests.test_auth_throttling_rejects_excessive_attempts core.tests.RolePermissionTests core.tests.AuthenticationLifecycleTests -v 1` | `Ran 14 tests in 5.743s. OK` |
-| Full Django Test Suite | `.venv/bin/python manage.py test -v 1` | `Ran 177 tests in 38.616s. OK` |
+| Full Django Test Suite | `DEBUG=True DJANGO_SECRET_KEY='<test-only-secret>' <shared-venv>/bin/python manage.py test -v 1` | `Ran 178 tests in 40.409s. OK` |
 | Git Whitespace Check | `git diff --check` | Clean (0 issues) |
 
 ---
 
 ## 7. Next Ticket
 
-**KAN-40 — Hospital Profile CMS**  
+**KAN-40 — Hospital Profile CMS**
 *(Unblocked and ready for implementation in the next sequential run; will provide administrator CMS workflow over `HospitalSettings`)*
