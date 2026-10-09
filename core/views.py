@@ -2568,3 +2568,143 @@ def stock_receipt_list(request):
             "receipt_request_key": uuid.uuid4(),
         },
     )
+
+
+# ==============================================================================
+# PATIENT WEB PORTAL MODULE
+# ==============================================================================
+
+
+def _get_verified_patient_for_request(request):
+    """Retrieve and verify the patient associated with the authenticated user."""
+    if not request.user.is_authenticated or not request.user.is_active:
+        raise PermissionDenied("Authentication required.")
+    account = getattr(request.user, "patient_account", None)
+    if not account or not account.is_verified:
+        raise PermissionDenied("Verified patient account required.")
+    patient = account.patient
+    if patient.archived_at is not None:
+        raise PermissionDenied("Patient account is archived.")
+    return patient
+
+
+def patient_dashboard(request):
+    patient = _get_verified_patient_for_request(request)
+    now = timezone.now()
+    today = timezone.localdate()
+
+    upcoming_appointments = (
+        Appointment.objects.filter(
+            patient=patient,
+            scheduled_at__gte=now - timedelta(hours=2),
+            status__in=[
+                Appointment.Status.SCHEDULED,
+                Appointment.Status.CHECKED_IN,
+            ],
+        )
+        .select_related("doctor__user", "visit_type")
+        .order_by("scheduled_at")
+    )
+
+    past_appointments = (
+        Appointment.objects.filter(patient=patient)
+        .exclude(pk__in=upcoming_appointments.values_list("pk", flat=True))
+        .select_related("doctor__user", "visit_type")
+        .order_by("-scheduled_at")[:10]
+    )
+
+    prescriptions = (
+        Prescription.objects.filter(patient=patient)
+        .select_related("doctor__user")
+        .prefetch_related("items__medicine")
+        .order_by("-issued_at")
+    )
+
+    documents = (
+        PatientDocument.objects.filter(
+            patient=patient,
+            validation_status=PatientDocument.ValidationStatus.CLEAN,
+        )
+        .select_related("uploaded_by__user")
+        .order_by("-created_at")
+    )
+
+    invoices = (
+        Invoice.objects.filter(patient=patient)
+        .prefetch_related("lines", "payments")
+        .order_by("-issued_at")
+    )
+
+    return render(
+        request,
+        "core/patient/dashboard.html",
+        {
+            "patient": patient,
+            "account": request.user.patient_account,
+            "upcoming_appointments": upcoming_appointments,
+            "past_appointments": past_appointments,
+            "prescriptions": prescriptions,
+            "documents": documents,
+            "invoices": invoices,
+            "today": today,
+        },
+    )
+
+
+def patient_portal_document_download(request, public_id):
+    patient = _get_verified_patient_for_request(request)
+    document = get_object_or_404(
+        PatientDocument.objects.filter(
+            patient=patient,
+            validation_status=PatientDocument.ValidationStatus.CLEAN,
+        ),
+        public_id=public_id,
+    )
+    try:
+        file_handle = open_validated_patient_document(document)
+    except FileNotFoundError:
+        raise Http404("Document not found")
+
+    _audit_patient_change(
+        request,
+        patient,
+        "patient.document_downloaded",
+        [f"doc_type:{document.document_type}", f"public_id:{document.public_id}"],
+    )
+
+    response = FileResponse(
+        file_handle,
+        as_attachment=True,
+        filename=patient_document_download_name(document),
+        content_type=document.content_type,
+    )
+    response["Content-Length"] = str(document.size_bytes)
+    response["Cache-Control"] = "private, no-store"
+    response["Pragma"] = "no-cache"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+def patient_portal_prescription_print(request, pk):
+    patient = _get_verified_patient_for_request(request)
+    prescription = get_object_or_404(
+        Prescription.objects.select_related(
+            "patient", "doctor__user", "consultation"
+        ).prefetch_related("items__medicine"),
+        pk=pk,
+        patient=patient,
+    )
+    _audit_clinical_access(
+        request,
+        "clinical.prescription_printed",
+        "prescription",
+        prescription.pk,
+    )
+    return render(
+        request,
+        "core/clinical/prescription_print.html",
+        {
+            "prescription": prescription,
+            "items": prescription.items.all(),
+        },
+    )

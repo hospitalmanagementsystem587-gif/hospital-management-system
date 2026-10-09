@@ -1,4 +1,18 @@
 from django.urls import include, path
 
+from core import views
 
-urlpatterns = [path("", include("config.portal_urls"))]
+urlpatterns = [
+    path("", views.patient_dashboard, name="patient_dashboard"),
+    path(
+        "documents/<uuid:public_id>/download/",
+        views.patient_portal_document_download,
+        name="patient_portal_document_download",
+    ),
+    path(
+        "prescriptions/<int:pk>/print/",
+        views.patient_portal_prescription_print,
+        name="patient_portal_prescription_print",
+    ),
+    path("", include("config.portal_urls")),
+]

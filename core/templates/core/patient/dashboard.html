@@ -1,0 +1,207 @@
+{% extends "core/base.html" %}
+
+{% block title %}My Health Dashboard | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom: 2rem;">
+  <div>
+    <div class="portal-badge" style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+      <span class="badge badge-info">Patient portal</span>
+      <span class="badge badge-success">Verified Patient</span>
+    </div>
+    <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-secondary); margin: 0 0 0.25rem 0;">Welcome, {{ patient.full_name }}</h1>
+    <p style="color: var(--color-text-muted); font-size: 0.9375rem; margin: 0;">
+      Medical Record Number (MRN): <strong>{{ patient.mrn }}</strong> &bull; DOB: {{ patient.date_of_birth|date:"d M Y"|default:"Not recorded" }}
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <a href="/appointments/book/" class="btn-stitch-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+      Book New Appointment
+    </a>
+  </div>
+</div>
+
+<!-- Section 1: Upcoming Appointments -->
+<section style="margin-bottom: 2.5rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+    <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--color-secondary); margin: 0;">Upcoming Appointments</h2>
+    <span class="badge badge-info">{{ upcoming_appointments|length }} Scheduled</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date &amp; Time</th>
+        <th>Doctor / Department</th>
+        <th>Visit Type</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for apt in upcoming_appointments %}
+        <tr>
+          <td>
+            <strong style="color: var(--color-primary); font-size: 0.9375rem;">{{ apt.scheduled_at|date:"D, d M Y &bull; H:i" }}</strong>
+          </td>
+          <td>
+            <strong>Dr. {{ apt.doctor.user.get_full_name|default:apt.doctor.user.username }}</strong>
+            {% if apt.doctor.specialty %}
+              <div style="font-size: 0.75rem; color: var(--color-text-muted);">{{ apt.doctor.specialty }}</div>
+            {% endif %}
+          </td>
+          <td>{{ apt.visit_type.name|default:"General Consultation" }}</td>
+          <td>
+            <span class="badge badge-info">{{ apt.get_status_display }}</span>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">
+            No upcoming appointments scheduled.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<!-- Section 2: Active & Historical Prescriptions -->
+<section style="margin-bottom: 2.5rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+    <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--color-secondary); margin: 0;">Prescriptions &amp; Medications</h2>
+    <span class="badge badge-info">{{ prescriptions|length }} Records</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Prescription</th>
+        <th>Prescribing Doctor</th>
+        <th>Date</th>
+        <th>Medicines &amp; Regimen</th>
+        <th>Print</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rx in prescriptions %}
+        <tr>
+          <td>
+            <strong style="color: var(--color-secondary);">{{ rx.number }}</strong>
+          </td>
+          <td>
+            Dr. {{ rx.doctor.user.get_full_name|default:rx.doctor.user.username }}
+          </td>
+          <td>
+            <span style="font-size: 0.8125rem; color: var(--color-text-muted);">{{ rx.issued_at|date:"d M Y" }}</span>
+          </td>
+          <td>
+            <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.35rem;">
+              {% for item in rx.items.all %}
+                <li style="font-size: 0.875rem;">
+                  <strong>{{ item.medicine.generic_name }} {{ item.medicine.strength }}</strong>
+                  <span style="color: var(--color-text-muted); font-size: 0.75rem;">({{ item.dosage }} &bull; {{ item.frequency }} &bull; {{ item.duration }})</span>
+                </li>
+              {% endfor %}
+            </ul>
+          </td>
+          <td>
+            <a href="{% url 'patient_portal_prescription_print' rx.pk %}" target="_blank" rel="noopener noreferrer" class="btn-stitch-secondary" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; min-height: 28px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+              Print
+            </a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">
+            No prescriptions issued for your account yet.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<!-- Section 3: Health Documents & Diagnostic Reports -->
+<section style="margin-bottom: 2.5rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+    <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--color-secondary); margin: 0;">Clinical Documents &amp; Lab Reports</h2>
+    <span class="badge badge-info">{{ documents|length }} Files</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Document Title</th>
+        <th>Category</th>
+        <th>Uploaded On</th>
+        <th>File Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for doc in documents %}
+        <tr>
+          <td>
+            <strong>{{ doc.title }}</strong>
+            {% if doc.notes %}<div style="font-size: 0.75rem; color: var(--color-text-muted);">{{ doc.notes }}</div>{% endif %}
+          </td>
+          <td>
+            <span class="badge badge-info">{{ doc.get_document_type_display }}</span>
+          </td>
+          <td>
+            <span style="font-size: 0.8125rem; color: var(--color-text-muted);">{{ doc.created_at|date:"d M Y H:i" }}</span>
+          </td>
+          <td>
+            <a href="{% url 'patient_portal_document_download' doc.public_id %}" target="_blank" rel="noopener noreferrer" class="btn-stitch-secondary" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; min-height: 28px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download
+            </a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">
+            No reports or scanned documents available.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<!-- Section 4: Billing Receipts & Invoices -->
+<section style="margin-bottom: 2rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+    <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--color-secondary); margin: 0;">Billing &amp; Receipts</h2>
+    <span class="badge badge-info">{{ invoices|length }} Invoices</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Invoice Number</th>
+        <th>Issued Date</th>
+        <th>Status</th>
+        <th>Total Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in invoices %}
+        <tr>
+          <td><strong>{{ inv.number }}</strong></td>
+          <td>{{ inv.issued_at|date:"d M Y" }}</td>
+          <td><span class="badge badge-success">{{ inv.get_status_display }}</span></td>
+          <td><strong>₹{{ inv.total }}</strong></td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">
+            No invoices recorded for your account.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
