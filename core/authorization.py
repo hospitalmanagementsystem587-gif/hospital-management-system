@@ -13,8 +13,7 @@ PORTAL_ALLOWED_GROUPS = {
     "staff": frozenset({"Administrator", "Doctor", "Reception", "Pharmacy"}),
     "store": frozenset({"Administrator", "Pharmacy"}),
     "patient": frozenset(),
-    # Agent portal remains administrator-only until dedicated support-agent role is introduced
-    "agent": frozenset({"Administrator"}),
+    "agent": frozenset({"Administrator", "Support Agent"}),
 }
 
 

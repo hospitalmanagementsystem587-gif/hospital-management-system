@@ -192,6 +192,17 @@ ROLE_PERMISSIONS = {
         "core.view_ticketattachment",
         "core.add_ticketattachment",
     ),
+    "Support Agent": (
+        "core.view_department",
+        "core.view_staffprofile",
+        "core.view_patient",
+        "core.view_ticket",
+        "core.change_ticket",
+        "core.view_ticketmessage",
+        "core.add_ticketmessage",
+        "core.view_ticketattachment",
+        "core.add_ticketattachment",
+    ),
 }
 
 

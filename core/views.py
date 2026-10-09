@@ -3459,3 +3459,142 @@ def patient_ticket_detail(request, pk):
             "attachments_list": patient_attachments,
         },
     )
+
+
+# ==============================================================================
+# AGENT QUEUE & WORKSPACE (KAN-92)
+# ==============================================================================
+
+
+@permission_required("core.view_ticket", raise_exception=True)
+def agent_ticket_queue(request):
+    """Hospital agent workspace: browse and triage tickets across authorized queues."""
+    from core.services.ticketing import agent_tickets_queryset
+    queue_filter = request.GET.get("queue", "all").strip()
+    query = request.GET.get("q", "").strip()
+
+    tickets = agent_tickets_queryset(
+        request.user,
+        queue_filter=queue_filter,
+        query=query,
+    )
+
+    counts = {
+        "all": agent_tickets_queryset(request.user, queue_filter="all").count(),
+        "unassigned": agent_tickets_queryset(request.user, queue_filter="unassigned").count(),
+        "assigned_to_me": agent_tickets_queryset(request.user, queue_filter="assigned_to_me").count(),
+        "high_priority": agent_tickets_queryset(request.user, queue_filter="high_priority").count(),
+        "sla_breached": agent_tickets_queryset(request.user, queue_filter="sla_breached").count(),
+        "waiting_on_requester": agent_tickets_queryset(request.user, queue_filter="waiting_on_requester").count(),
+    }
+
+    return render(
+        request,
+        "core/agent/queue.html",
+        {
+            "tickets": tickets,
+            "queue_filter": queue_filter,
+            "query": query,
+            "counts": counts,
+        },
+    )
+
+
+@permission_required("core.view_ticket", raise_exception=True)
+def agent_ticket_workspace(request, pk):
+    """Detailed ticket workspace for agents: reply, internal notes, assignments, status changes."""
+    from core.services.ticketing import (
+        add_ticket_message,
+        can_access_ticket,
+        create_ticket_attachment,
+        messages_for_user,
+    )
+    ticket = get_object_or_404(
+        Ticket.objects.select_related("patient", "assigned_to__user", "assigned_team", "sla_policy"),
+        pk=pk,
+    )
+    if not can_access_ticket(request.user, ticket):
+        raise PermissionDenied("You do not have access to this ticket.")
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        reason = request.POST.get("reason", "").strip()
+
+        if action == "reply":
+            body = request.POST.get("body", "").strip()
+            is_internal = request.POST.get("is_internal") == "true"
+            upload = request.FILES.get("attachment")
+            if not body and not upload:
+                messages.error(request, "Please enter a message or attach a file.")
+            else:
+                try:
+                    msg = None
+                    if body:
+                        msg = add_ticket_message(
+                            ticket=ticket,
+                            author=request.user,
+                            body=body,
+                            is_internal=is_internal,
+                        )
+                    if upload:
+                        create_ticket_attachment(
+                            ticket=ticket,
+                            uploaded_by=request.user,
+                            upload=upload,
+                            message=msg,
+                            is_internal=is_internal,
+                        )
+                    messages.success(request, "Internal note / reply recorded.")
+                    return redirect("agent_ticket_workspace", pk=ticket.pk)
+                except Exception as e:
+                    messages.error(request, str(e))
+
+        elif action == "status_change":
+            new_status = request.POST.get("status", "").strip()
+            try:
+                ticket.transition_to(new_status, actor=request.user, reason=reason)
+                messages.success(request, f"Ticket transitioned to {ticket.get_status_display()}.")
+                return redirect("agent_ticket_workspace", pk=ticket.pk)
+            except Exception as e:
+                messages.error(request, str(e))
+
+        elif action == "assign":
+            target_type = request.POST.get("assign_type", "me")
+            profile = StaffProfile.objects.filter(user=request.user).first()
+            try:
+                if target_type == "me":
+                    if not profile:
+                        raise ValidationError("You do not have a staff profile.")
+                    ticket.assign(
+                        staff_profile=profile,
+                        team=profile.department,
+                        actor=request.user,
+                        reason=reason or "Self-assigned by agent",
+                    )
+                elif target_type == "unassign":
+                    ticket.assign(
+                        staff_profile=None,
+                        team=ticket.assigned_team,
+                        actor=request.user,
+                        reason=reason or "Unassigned by agent",
+                    )
+                messages.success(request, "Ticket assignment updated.")
+                return redirect("agent_ticket_workspace", pk=ticket.pk)
+            except Exception as e:
+                messages.error(request, str(e))
+
+    messages_list = messages_for_user(ticket, request.user)
+    attachments_list = ticket.attachments.all()
+    sla_logs = ticket.sla_logs.all().order_by("-created_at")
+
+    return render(
+        request,
+        "core/agent/workspace.html",
+        {
+            "ticket": ticket,
+            "messages_list": messages_list,
+            "attachments_list": attachments_list,
+            "sla_logs": sla_logs,
+            "status_choices": Ticket.Status.choices,
+        },
+    )

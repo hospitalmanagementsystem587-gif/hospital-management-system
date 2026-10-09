@@ -1,0 +1,123 @@
+{% extends "core/base.html" %}
+
+{% block title %}Support Agent Queue | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="agent-workspace" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <div class="portal-badge" style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <span class="badge badge-info">Agent Portal</span>
+        <span class="badge badge-success">Hospital Support Operations</span>
+      </div>
+      <h1 style="font-size: 1.875rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem 0;">Support Ticket Queue</h1>
+      <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+        Manage operational tickets, SLA boundaries, and patient inquiries across departments.
+      </p>
+    </div>
+  </div>
+
+  <!-- Queue Filter Tabs -->
+  <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem;">
+    <a href="?queue=all{% if query %}&q={{ query }}{% endif %}" class="btn-stitch-secondary" style="font-size: 0.875rem; {% if queue_filter == 'all' %}background: #0284c7; color: #ffffff;{% endif %}">
+      All Tickets ({{ counts.all }})
+    </a>
+    <a href="?queue=unassigned{% if query %}&q={{ query }}{% endif %}" class="btn-stitch-secondary" style="font-size: 0.875rem; {% if queue_filter == 'unassigned' %}background: #0284c7; color: #ffffff;{% endif %}">
+      Unassigned ({{ counts.unassigned }})
+    </a>
+    <a href="?queue=assigned_to_me{% if query %}&q={{ query }}{% endif %}" class="btn-stitch-secondary" style="font-size: 0.875rem; {% if queue_filter == 'assigned_to_me' %}background: #0284c7; color: #ffffff;{% endif %}">
+      Assigned To Me ({{ counts.assigned_to_me }})
+    </a>
+    <a href="?queue=high_priority{% if query %}&q={{ query }}{% endif %}" class="btn-stitch-secondary" style="font-size: 0.875rem; {% if queue_filter == 'high_priority' %}background: #0284c7; color: #ffffff;{% endif %}">
+      High Priority ({{ counts.high_priority }})
+    </a>
+    <a href="?queue=sla_breached{% if query %}&q={{ query }}{% endif %}" class="btn-stitch-secondary" style="font-size: 0.875rem; {% if queue_filter == 'sla_breached' %}background: #ef4444; color: #ffffff;{% endif %}">
+      SLA Breached ({{ counts.sla_breached }})
+    </a>
+    <a href="?queue=waiting_on_requester{% if query %}&q={{ query }}{% endif %}" class="btn-stitch-secondary" style="font-size: 0.875rem; {% if queue_filter == 'waiting_on_requester' %}background: #0284c7; color: #ffffff;{% endif %}">
+      Waiting On Requester ({{ counts.waiting_on_requester }})
+    </a>
+  </div>
+
+  <!-- Search Bar -->
+  <form method="get" style="margin-bottom: 1.5rem; display: flex; gap: 0.75rem;">
+    <input type="hidden" name="queue" value="{{ queue_filter }}">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search tickets by #, title, or patient name/MRN..." style="flex: 1; padding: 0.65rem 1rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9375rem;">
+    <button type="submit" class="btn-stitch-primary" style="padding: 0.65rem 1.25rem;">Search</button>
+    {% if query %}
+      <a href="?queue={{ queue_filter }}" class="btn-stitch-secondary" style="padding: 0.65rem 1rem; text-decoration: none;">Clear</a>
+    {% endif %}
+  </form>
+
+  <!-- Table -->
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+    {% if tickets %}
+      <table style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+          <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 0.8125rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">
+            <th style="padding: 1rem 1.25rem;">Ticket #</th>
+            <th style="padding: 1rem 1.25rem;">Title</th>
+            <th style="padding: 1rem 1.25rem;">Patient / MRN</th>
+            <th style="padding: 1rem 1.25rem;">Department / Assignee</th>
+            <th style="padding: 1rem 1.25rem;">Priority</th>
+            <th style="padding: 1rem 1.25rem;">Status</th>
+            <th style="padding: 1rem 1.25rem;">SLA Due</th>
+            <th style="padding: 1rem 1.25rem;">Action</th>
+          </tr>
+        </thead>
+        <tbody style="font-size: 0.9375rem; color: #1e293b;">
+          {% for t in tickets %}
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 1rem 1.25rem; font-weight: 700; color: #0284c7;">{{ t.number }}</td>
+              <td style="padding: 1rem 1.25rem; font-weight: 600;">{{ t.title }}</td>
+              <td style="padding: 1rem 1.25rem; font-size: 0.875rem;">
+                {% if t.patient %}
+                  {{ t.patient.full_name }} <small style="color: #64748b;">({{ t.patient.mrn }})</small>
+                {% else %}
+                  <span style="color: #94a3b8;">General</span>
+                {% endif %}
+              </td>
+              <td style="padding: 1rem 1.25rem; font-size: 0.875rem;">
+                <span class="badge badge-info">{{ t.assigned_team.name|default:"Unassigned Team" }}</span>
+                {% if t.assigned_to %}
+                  <div style="margin-top: 0.25rem; color: #475569; font-size: 0.8125rem;">
+                    {{ t.assigned_to.user.get_full_name|default:t.assigned_to.user.username }}
+                  </div>
+                {% else %}
+                  <div style="margin-top: 0.25rem; color: #f59e0b; font-size: 0.8125rem;">Unassigned Agent</div>
+                {% endif %}
+              </td>
+              <td style="padding: 1rem 1.25rem;">
+                <span class="badge {% if t.priority == 'urgent' %}badge-danger{% elif t.priority == 'high' %}badge-warning{% else %}badge-info{% endif %}">
+                  {{ t.get_priority_display }}
+                </span>
+              </td>
+              <td style="padding: 1rem 1.25rem;">
+                <span class="badge {% if t.status == 'resolved' or t.status == 'closed' %}badge-success{% else %}badge-warning{% endif %}">
+                  {{ t.get_status_display }}
+                </span>
+              </td>
+              <td style="padding: 1rem 1.25rem; font-size: 0.8125rem;">
+                {% if t.is_sla_breached %}
+                  <span class="badge badge-danger">BREACHED</span>
+                {% elif t.sla_due_at %}
+                  <span style="color: #475569;">{{ t.sla_due_at|date:"d M, H:i" }}</span>
+                {% else %}
+                  <span style="color: #94a3b8;">None</span>
+                {% endif %}
+              </td>
+              <td style="padding: 1rem 1.25rem;">
+                <a href="{% url 'agent_ticket_workspace' pk=t.pk %}" style="color: #0284c7; text-decoration: none; font-weight: 600;">Open &rarr;</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div style="padding: 3rem 1.5rem; text-align: center; color: #64748b;">
+        <p style="margin: 0; font-size: 1.05rem; font-weight: 500;">No tickets found in this queue.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

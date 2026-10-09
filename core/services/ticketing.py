@@ -2,6 +2,8 @@ from pathlib import Path
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
 
 from core.models import PatientAccount, StaffProfile, Ticket, TicketAttachment, TicketMessage
 from core.services.documents import inspect_patient_document_upload, open_validated_patient_document
@@ -78,6 +80,67 @@ def patient_tickets_queryset(patient, user):
 
 
 
+def agent_tickets_queryset(user, *, queue_filter="all", query=None):
+    """
+    Returns permission-scoped and department-scoped tickets for an authorized agent.
+    Filters:
+    - 'unassigned': Unassigned tickets matching agent's department or global
+    - 'assigned_to_me': Assigned directly to agent's staff profile
+    - 'high_priority': High or Urgent priority tickets in agent's scope
+    - 'sla_breached': Tickets where SLA is breached
+    - 'waiting_on_requester': Tickets waiting on requester
+    - 'all': All tickets in agent's department or queue scope
+    """
+    if not getattr(user, "is_authenticated", False) or not user.is_active:
+        return Ticket.objects.none()
+    if not user.has_perm("core.view_ticket"):
+        return Ticket.objects.none()
+
+    profile = _staff_profile(user)
+    if user.is_superuser:
+        base_qs = Ticket.objects.all()
+    elif profile is not None:
+        # Agent can see: tickets assigned to themselves, or tickets assigned to their department, or unassigned tickets in their department / general (null department)
+        dept = profile.department
+        base_qs = Ticket.objects.filter(
+            Q(assigned_to=profile)
+            | Q(assigned_team=dept)
+            | Q(assigned_team__isnull=True, assigned_to__isnull=True)
+        )
+    else:
+        return Ticket.objects.none()
+
+    now = timezone.now()
+    if queue_filter == "unassigned":
+        base_qs = base_qs.filter(assigned_to__isnull=True)
+    elif queue_filter == "assigned_to_me":
+        if profile:
+            base_qs = base_qs.filter(assigned_to=profile)
+        else:
+            base_qs = Ticket.objects.none()
+    elif queue_filter == "high_priority":
+        base_qs = base_qs.filter(priority__in=[Ticket.Priority.HIGH, Ticket.Priority.URGENT])
+    elif queue_filter == "sla_breached":
+        base_qs = base_qs.filter(
+            Q(sla_breached_at__isnull=False) | Q(sla_due_at__lt=now, resolved_at__isnull=True)
+        )
+    elif queue_filter == "waiting_on_requester":
+        base_qs = base_qs.filter(status=Ticket.Status.WAITING_ON_REQUESTER)
+
+    if query:
+        query = query.strip()
+        base_qs = base_qs.filter(
+            Q(number__icontains=query)
+            | Q(title__icontains=query)
+            | Q(patient__full_name__icontains=query)
+            | Q(patient__mrn__icontains=query)
+        )
+
+    return base_qs.select_related(
+        "patient", "assigned_to__user", "assigned_team", "sla_policy"
+    ).order_by("-created_at")
+
+
 def can_access_ticket(user, ticket, *, write=False):
     if not getattr(user, "is_authenticated", False) or not user.is_active:
         return False
@@ -95,6 +158,7 @@ def can_access_ticket(user, ticket, *, write=False):
         return ticket.assigned_to_id == profile.pk
     if ticket.assigned_team_id:
         return ticket.assigned_team_id == profile.department_id
+    # Unassigned tickets in agent's department or unassigned department are viewable by agent
     return True
 
 
