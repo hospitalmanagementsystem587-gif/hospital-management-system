@@ -3037,3 +3037,48 @@ def patient_doctor_directory(request):
             "query": query,
         },
     )
+
+
+def patient_document_list(request):
+    patient = _get_verified_patient_for_request(request)
+
+    documents = (
+        PatientDocument.objects.filter(
+            patient=patient,
+            validation_status=PatientDocument.ValidationStatus.CLEAN,
+            patient_released_at__isnull=False,
+            patient_access_revoked_at__isnull=True,
+        )
+        .select_related("uploaded_by__user")
+        .order_by("-created_at", "-id")
+    )
+
+    doc_type_filter = request.GET.get("type", "").strip()
+    if doc_type_filter:
+        documents = documents.filter(document_type=doc_type_filter)
+
+    query = request.GET.get("q", "").strip()
+    if query:
+        documents = documents.filter(
+            Q(title__icontains=query)
+            | Q(notes__icontains=query)
+        )
+
+    _audit_clinical_access(
+        request,
+        "clinical.documents_list_viewed",
+        "patient",
+        patient.pk,
+    )
+
+    return render(
+        request,
+        "core/patient/document_list.html",
+        {
+            "patient": patient,
+            "documents": documents,
+            "document_types": PatientDocument.DocumentType.choices,
+            "selected_type": doc_type_filter,
+            "query": query,
+        },
+    )

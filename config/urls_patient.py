@@ -5,6 +5,11 @@ from core import views
 urlpatterns = [
     path("", views.patient_dashboard, name="patient_dashboard"),
     path(
+        "documents/",
+        views.patient_document_list,
+        name="patient_document_list",
+    ),
+    path(
         "documents/<uuid:public_id>/download/",
         views.patient_portal_document_download,
         name="patient_portal_document_download",

@@ -1,0 +1,123 @@
+{% extends "core/base.html" %}
+
+{% block title %}Clinical Documents & Reports | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="patient-workspace" style="max-width: 1000px; margin: 2rem auto; padding: 0 1rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <a href="{% url 'patient_dashboard' %}" style="display: inline-flex; align-items: center; gap: 0.5rem; color: #0284c7; text-decoration: none; font-weight: 500; font-size: 0.875rem; margin-bottom: 0.75rem;">
+        &larr; Back to Dashboard
+      </a>
+      <h1 style="font-size: 1.875rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem 0;">Clinical Documents &amp; Diagnostic Reports</h1>
+      <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+        View and securely download your released medical records, lab findings, and diagnostic reports.
+      </p>
+    </div>
+  </div>
+
+  <!-- Search & Filter Card -->
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+    <form method="get" action="." style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) auto; gap: 1rem; align-items: end;">
+      <div>
+        <label for="id_search" style="display: block; font-weight: 600; color: #1e293b; margin-bottom: 0.4rem; font-size: 0.8125rem;">
+          Search Title or Description
+        </label>
+        <input type="text" name="q" id="id_search" value="{{ query }}" placeholder="Search by title, keywords..." class="appointment-control" style="width: 100%;">
+      </div>
+
+      <div>
+        <label for="id_type" style="display: block; font-weight: 600; color: #1e293b; margin-bottom: 0.4rem; font-size: 0.8125rem;">
+          Document Category
+        </label>
+        <select name="type" id="id_type" class="appointment-control" style="width: 100%;">
+          <option value="">All Categories</option>
+          {% for code, label in document_types %}
+            <option value="{{ code }}" {% if selected_type == code %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem;">
+        <button type="submit" class="btn-stitch-primary" style="height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0 1.25rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          Filter
+        </button>
+        {% if query or selected_type %}
+          <a href="{% url 'patient_document_list' %}" class="btn-stitch-secondary" style="height: 42px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding: 0 1rem;">
+            Clear
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Documents Table Card -->
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+      <h2 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin: 0;">
+        Available Clinical Documents
+      </h2>
+      <span class="badge badge-info">{{ documents|length }} Available</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Document Title</th>
+          <th>Category</th>
+          <th>File Details</th>
+          <th>Released Date</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in documents %}
+          <tr>
+            <td>
+              <div style="font-weight: 700; color: #0f172a;">{{ doc.title }}</div>
+              {% if doc.notes %}
+                <div style="font-size: 0.8125rem; color: #64748b; margin-top: 0.25rem;">{{ doc.notes }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-info">{{ doc.get_document_type_display }}</span>
+            </td>
+            <td>
+              <div style="font-size: 0.8125rem; color: #334155; font-weight: 500;">
+                {{ doc.content_type|default:"File" }}
+              </div>
+              <div style="font-size: 0.75rem; color: #64748b;">
+                {{ doc.size_bytes|filesizeformat }}
+              </div>
+            </td>
+            <td>
+              <span style="font-size: 0.8125rem; color: #334155; font-weight: 500;">
+                {{ doc.patient_released_at|date:"d M Y H:i" }}
+              </span>
+            </td>
+            <td>
+              <a href="{% url 'patient_portal_document_download' doc.public_id %}" target="_blank" rel="noopener noreferrer" class="btn-stitch-secondary" style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; font-size: 0.8125rem; text-decoration: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" style="text-align: center; color: #64748b; padding: 3rem 1rem;">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" style="margin-bottom: 0.75rem; display: block; margin-left: auto; margin-right: auto;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+              <strong>No clinical documents found.</strong>
+              <div style="font-size: 0.875rem; margin-top: 0.25rem;">
+                {% if query or selected_type %}No records match your search criteria.{% else %}When diagnostic reports or clinical files are validated and released by medical staff, they will appear here.{% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

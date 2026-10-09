@@ -143,7 +143,10 @@
 <section style="margin-bottom: 2.5rem;">
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
     <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--color-secondary); margin: 0;">Clinical Documents &amp; Lab Reports</h2>
-    <span class="badge badge-info">{{ documents|length }} Files</span>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <a href="{% url 'patient_document_list' %}" style="font-size: 0.875rem; color: #0284c7; text-decoration: none; font-weight: 600;">View All Documents &rarr;</a>
+      <span class="badge badge-info">{{ documents|length }} Files</span>
+    </div>
   </div>
 
   <table>
