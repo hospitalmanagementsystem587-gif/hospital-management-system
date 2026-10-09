@@ -24,6 +24,60 @@ def _staff_profile(user):
     return StaffProfile.objects.filter(user=user).first()
 
 
+def create_patient_ticket(*, patient, user, title, description, category, priority=Ticket.Priority.NORMAL, upload=None):
+    """
+    Safely creates a ticket for a verified patient with server-side identity derivation.
+    Restricts allowed public categories and sanitizes input.
+    """
+    allowed_categories = [
+        Ticket.Category.GENERAL,
+        Ticket.Category.BILLING,
+        Ticket.Category.CLINICAL,
+        Ticket.Category.PHARMACY,
+        Ticket.Category.TECHNICAL,
+    ]
+    if category not in allowed_categories:
+        raise ValidationError({"category": "Invalid or disallowed ticket category."})
+
+    title = (title or "").strip()
+    if not title:
+        raise ValidationError({"title": "A ticket title is required."})
+
+    description = (description or "").strip()
+    if not description:
+        raise ValidationError({"description": "A ticket description is required."})
+
+    with transaction.atomic():
+        ticket = Ticket.objects.create(
+            title=title,
+            description=description,
+            category=category,
+            priority=priority,
+            created_by=user,
+            patient=patient,
+            status=Ticket.Status.OPEN,
+        )
+        if upload:
+            create_ticket_attachment(
+                ticket=ticket,
+                uploaded_by=user,
+                upload=upload,
+                is_internal=False,
+            )
+        return ticket
+
+
+def patient_tickets_queryset(patient, user):
+    """
+    Returns only tickets owned by the given verified patient and user.
+    """
+    return Ticket.objects.filter(
+        patient=patient,
+        created_by=user,
+    ).prefetch_related("messages", "attachments").order_by("-created_at")
+
+
+
 def can_access_ticket(user, ticket, *, write=False):
     if not getattr(user, "is_authenticated", False) or not user.is_active:
         return False

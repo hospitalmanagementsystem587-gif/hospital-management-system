@@ -69,5 +69,20 @@ urlpatterns = [
         views.patient_feedback_submit,
         name="patient_feedback_submit",
     ),
+    path(
+        "tickets/",
+        views.patient_ticket_list,
+        name="patient_ticket_list",
+    ),
+    path(
+        "tickets/create/",
+        views.patient_ticket_create,
+        name="patient_ticket_create",
+    ),
+    path(
+        "tickets/<int:pk>/",
+        views.patient_ticket_detail,
+        name="patient_ticket_detail",
+    ),
     path("", include("config.portal_urls")),
 ]

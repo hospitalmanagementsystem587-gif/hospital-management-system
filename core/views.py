@@ -74,6 +74,9 @@ from .models import (
     StockMovement,
     StockReceipt,
     Supplier,
+    Ticket,
+    TicketAttachment,
+    TicketMessage,
     Ward,
 )
 from .services.numbering import next_number
@@ -3337,3 +3340,122 @@ def patient_feedback_submit(request):
 
     messages.success(request, "Thank you! Your feedback has been received and submitted for review.")
     return redirect("patient_feedback_workspace")
+
+
+# ==============================================================================
+# PATIENT TICKETING PORTAL (KAN-91)
+# ==============================================================================
+
+
+def patient_ticket_list(request):
+    """View patient's own tickets in the patient portal."""
+    patient = _get_verified_patient_for_request(request)
+    from core.services.ticketing import patient_tickets_queryset
+    tickets = patient_tickets_queryset(patient, request.user)
+    return render(
+        request,
+        "core/patient/ticket_list.html",
+        {
+            "patient": patient,
+            "tickets": tickets,
+        },
+    )
+
+
+def patient_ticket_create(request):
+    """Create a new ticket from the patient portal."""
+    patient = _get_verified_patient_for_request(request)
+    from core.services.ticketing import create_patient_ticket
+
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        description = request.POST.get("description", "").strip()
+        category = request.POST.get("category", "").strip()
+        priority = request.POST.get("priority", Ticket.Priority.NORMAL).strip()
+        upload = request.FILES.get("attachment")
+
+        try:
+            ticket = create_patient_ticket(
+                patient=patient,
+                user=request.user,
+                title=title,
+                description=description,
+                category=category,
+                priority=priority if priority in Ticket.Priority.values else Ticket.Priority.NORMAL,
+                upload=upload,
+            )
+            messages.success(request, f"Ticket {ticket.number} has been created successfully.")
+            return redirect("patient_ticket_detail", pk=ticket.pk)
+        except ValidationError as e:
+            for field, errs in e.message_dict.items():
+                messages.error(request, f"{field.capitalize()}: {' '.join(errs)}")
+        except Exception as e:
+            messages.error(request, str(e))
+
+    return render(
+        request,
+        "core/patient/ticket_create.html",
+        {
+            "patient": patient,
+            "categories": Ticket.Category.choices,
+            "priorities": Ticket.Priority.choices,
+        },
+    )
+
+
+def patient_ticket_detail(request, pk):
+    """View ticket details, visible messages, and post replies."""
+    patient = _get_verified_patient_for_request(request)
+    ticket = get_object_or_404(
+        Ticket.objects.filter(patient=patient, created_by=request.user),
+        pk=pk,
+    )
+    from core.services.ticketing import (
+        add_ticket_message,
+        create_ticket_attachment,
+        messages_for_user,
+    )
+
+    if request.method == "POST":
+        action = request.POST.get("action", "reply")
+        if action == "reply":
+            body = request.POST.get("body", "").strip()
+            upload = request.FILES.get("attachment")
+            if not body and not upload:
+                messages.error(request, "Please enter a message or attach a file.")
+            else:
+                try:
+                    msg = None
+                    if body:
+                        msg = add_ticket_message(
+                            ticket=ticket,
+                            author=request.user,
+                            body=body,
+                            is_internal=False,
+                        )
+                    if upload:
+                        create_ticket_attachment(
+                            ticket=ticket,
+                            uploaded_by=request.user,
+                            upload=upload,
+                            message=msg,
+                            is_internal=False,
+                        )
+                    messages.success(request, "Your reply has been posted.")
+                    return redirect("patient_ticket_detail", pk=ticket.pk)
+                except Exception as e:
+                    messages.error(request, str(e))
+
+    patient_messages = messages_for_user(ticket, request.user)
+    patient_attachments = ticket.attachments.filter(is_internal=False)
+
+    return render(
+        request,
+        "core/patient/ticket_detail.html",
+        {
+            "patient": patient,
+            "ticket": ticket,
+            "messages_list": patient_messages,
+            "attachments_list": patient_attachments,
+        },
+    )
