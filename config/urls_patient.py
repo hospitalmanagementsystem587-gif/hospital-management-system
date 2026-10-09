@@ -14,5 +14,10 @@ urlpatterns = [
         views.patient_portal_prescription_print,
         name="patient_portal_prescription_print",
     ),
+    path(
+        "appointments/book/",
+        views.patient_appointment_book,
+        name="patient_appointment_book",
+    ),
     path("", include("config.portal_urls")),
 ]

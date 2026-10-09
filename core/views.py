@@ -29,6 +29,7 @@ from .forms import (
     DischargeForm,
     InpatientDepositForm,
     MedicineForm,
+    PatientAppointmentBookingForm,
     PatientDocumentForm,
     PatientForm,
     PrescriptionItemFormSet,
@@ -2706,5 +2707,56 @@ def patient_portal_prescription_print(request, pk):
         {
             "prescription": prescription,
             "items": prescription.items.all(),
+        },
+    )
+
+
+def patient_appointment_book(request):
+    patient = _get_verified_patient_for_request(request)
+    form = PatientAppointmentBookingForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                doctor = form.cleaned_data["doctor"]
+                scheduled_at = form.cleaned_data["scheduled_at"]
+                visit_type = form.cleaned_data["visit_type"]
+
+                # Serialize slot checks for the selected doctor
+                StaffProfile.objects.select_for_update().get(pk=doctor.pk)
+                if appointment_slot_conflicts(doctor, scheduled_at):
+                    form.add_error(
+                        "scheduled_at",
+                        "This doctor already has an overlapping active appointment.",
+                    )
+                else:
+                    appointment = form.save(commit=False)
+                    appointment.patient = patient
+                    appointment.status = Appointment.Status.SCHEDULED
+                    appointment.save()
+
+                    _audit_appointment_change(
+                        request,
+                        appointment,
+                        "appointment.created",
+                        {"status": appointment.status, "source": "patient_portal"},
+                    )
+                    messages.success(
+                        request,
+                        "Your appointment has been successfully booked.",
+                    )
+                    return redirect("patient_dashboard")
+        except (IntegrityError, OperationalError):
+            form.add_error(
+                "scheduled_at",
+                "This doctor already has an overlapping active appointment.",
+            )
+
+    return render(
+        request,
+        "core/patient/appointment_book.html",
+        {
+            "patient": patient,
+            "form": form,
         },
     )

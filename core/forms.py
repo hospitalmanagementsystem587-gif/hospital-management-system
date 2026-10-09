@@ -161,6 +161,58 @@ class AppointmentForm(forms.ModelForm):
         return cleaned_data
 
 
+class PatientAppointmentBookingForm(forms.ModelForm):
+    class Meta:
+        model = Appointment
+        fields = ("doctor", "visit_type", "scheduled_at")
+        widgets = {
+            "scheduled_at": forms.DateTimeInput(
+                format="%Y-%m-%dT%H:%M",
+                attrs={
+                    "type": "datetime-local",
+                    "class": "appointment-control",
+                },
+            )
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["doctor"].queryset = (
+            StaffProfile.objects.filter(
+                user__groups__name="Doctor",
+                user__is_active=True,
+                department__is_active=True,
+            )
+            .select_related("user", "department")
+            .distinct()
+        )
+        self.fields["visit_type"].queryset = VisitType.objects.filter(is_active=True)
+        self.fields["doctor"].empty_label = "Select an attending doctor"
+        self.fields["visit_type"].empty_label = "Select a visit type"
+        for field_name in ("doctor", "visit_type"):
+            self.fields[field_name].widget.attrs.update(
+                {"class": "appointment-control"}
+            )
+
+    def clean_scheduled_at(self):
+        scheduled_at = self.cleaned_data.get("scheduled_at")
+        if scheduled_at and scheduled_at < timezone.now():
+            raise forms.ValidationError("Appointment time must be in the future.")
+        return scheduled_at
+
+    def clean(self):
+        cleaned_data = super().clean()
+        doctor = cleaned_data.get("doctor")
+        scheduled_at = cleaned_data.get("scheduled_at")
+        if doctor and scheduled_at:
+            if appointment_slot_conflicts(doctor, scheduled_at):
+                self.add_error(
+                    "scheduled_at",
+                    "This doctor already has an overlapping active appointment.",
+                )
+        return cleaned_data
+
+
 class ConsultationForm(forms.ModelForm):
     class Meta:
         model = Consultation
