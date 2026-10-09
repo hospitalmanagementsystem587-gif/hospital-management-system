@@ -7,7 +7,7 @@
   <div>
     <h1>Pharmacy Sale {{ sale.number }}</h1>
     <p style="color: var(--color-text-muted); font-size: 0.9375rem;">
-      Ledger Invoice: <a href="{% url 'invoice_detail' sale.invoice.pk %}"><strong>{{ sale.invoice.number }}</strong></a> · Total: <strong>{{ sale.invoice.total }}</strong>
+      Ledger Invoice: {% if perms.core.view_invoice and perms.core.change_invoice %}<a href="{% url 'invoice_detail' sale.invoice.pk %}"><strong>{{ sale.invoice.number }}</strong></a>{% else %}<strong>{{ sale.invoice.number }}</strong>{% endif %} · Total: <strong>₹{{ sale.invoice.total }}</strong>
     </p>
   </div>
   <span class="badge">{{ sale.get_status_display }}</span>
@@ -52,7 +52,8 @@
   </tbody>
 </table>
 
-<div class="action-links">
-  <a href="{% url 'pharmacy_prescription_list' %}">&larr; Back to pharmacy</a>
+<div class="action-links" style="display: flex; gap: 1rem; margin-top: 2rem;">
+  <a href="{% url 'pharmacy_prescription_list' %}" class="btn-stitch-secondary">&larr; Back to Dispensing &amp; Sales</a>
+  <a href="{% url 'pharmacy_dashboard' %}" class="btn-stitch-secondary">Store Dashboard</a>
 </div>
 {% endblock %}
