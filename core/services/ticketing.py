@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from core.models import PatientAccount, StaffProfile, Ticket, TicketAttachment, TicketMessage
+from core.models import Invoice, PatientAccount, Payment, StaffProfile, Ticket, TicketAttachment, TicketMessage
 from core.services.documents import inspect_patient_document_upload, open_validated_patient_document
 
 
@@ -23,10 +23,10 @@ def _staff_profile(user):
     return StaffProfile.objects.filter(user=user).first()
 
 
-def create_patient_ticket(*, patient, user, title, description, category, priority=Ticket.Priority.NORMAL, upload=None):
+def create_patient_ticket(*, patient, user, title, description, category, priority=Ticket.Priority.NORMAL, upload=None, invoice=None, payment=None):
     """
     Safely creates a ticket for a verified patient with server-side identity derivation.
-    Restricts allowed public categories and sanitizes input.
+    Restricts allowed public categories, validates billing references, and sanitizes input.
     """
     allowed_categories = [
         Ticket.Category.GENERAL,
@@ -45,6 +45,16 @@ def create_patient_ticket(*, patient, user, title, description, category, priori
     description = (description or "").strip()
     if not description:
         raise ValidationError({"description": "A ticket description is required."})
+
+    if invoice is not None:
+        if invoice.patient_id != patient.pk:
+            raise ValidationError({"invoice": "Referenced invoice does not belong to this patient."})
+        if invoice.status == Invoice.Status.DRAFT:
+            raise ValidationError({"invoice": "Draft invoices cannot be referenced in support tickets."})
+
+    if payment is not None:
+        if payment.invoice.patient_id != patient.pk:
+            raise ValidationError({"payment": "Referenced payment does not belong to this patient."})
 
     with transaction.atomic():
         ticket = Ticket.objects.create(
@@ -66,11 +76,11 @@ def create_patient_ticket(*, patient, user, title, description, category, priori
         return ticket
 
 
-def create_staff_ticket(*, user, title, description, category, priority=Ticket.Priority.NORMAL, patient=None, assigned_team=None, upload=None):
+def create_staff_ticket(*, user, title, description, category, priority=Ticket.Priority.NORMAL, patient=None, assigned_team=None, upload=None, invoice=None, payment=None):
     """
     Safely creates an operational/clinical support ticket from staff workflows.
     Ensures requester is active staff, attaches staff profile department if unassigned,
-    and records optional patient context.
+    validates invoice/payment references, and records optional patient context.
     """
     if not getattr(user, "is_authenticated", False) or not user.is_active:
         raise PermissionDenied("Authentication required to create staff tickets.")
@@ -92,6 +102,16 @@ def create_staff_ticket(*, user, title, description, category, priority=Ticket.P
     description = (description or "").strip()
     if not description:
         raise ValidationError({"description": "A ticket description is required."})
+
+    if invoice is not None and patient is not None:
+        if invoice.patient_id != patient.pk:
+            raise ValidationError({"invoice": "Referenced invoice does not belong to the selected patient."})
+
+    if payment is not None:
+        if invoice is not None and payment.invoice_id != invoice.pk:
+            raise ValidationError({"payment": "Referenced payment does not match the invoice."})
+        if patient is not None and payment.invoice.patient_id != patient.pk:
+            raise ValidationError({"payment": "Referenced payment does not belong to the selected patient."})
 
     with transaction.atomic():
         ticket = Ticket.objects.create(

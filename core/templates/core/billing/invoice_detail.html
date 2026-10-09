@@ -45,10 +45,15 @@
     </div>
   </div>
 
-  <div class="hero-actions">
+  <div class="hero-actions" style="display: flex; gap: 0.5rem; align-items: center;">
     {% if can_back_to_patient and invoice.patient_id %}
       <a href="{% url 'patient_detail' invoice.patient_id %}" class="btn-stitch-secondary">
         &larr; Patient profile
+      </a>
+    {% endif %}
+    {% if perms.core.add_ticket %}
+      <a href="{% url 'staff_ticket_create' %}?invoice_id={{ invoice.pk }}{% if invoice.patient_id %}&patient_id={{ invoice.patient_id }}{% endif %}&category=billing" class="btn-stitch-secondary">
+        Raise Billing Ticket
       </a>
     {% endif %}
   </div>

@@ -3367,6 +3367,18 @@ def patient_ticket_create(request):
     patient = _get_verified_patient_for_request(request)
     from core.services.ticketing import create_patient_ticket
 
+    invoice_id = request.GET.get("invoice_id") or request.POST.get("invoice_id") or request.POST.get("invoice")
+    invoice = None
+    if invoice_id:
+        invoice = Invoice.objects.filter(pk=invoice_id).first()
+
+    payment_id = request.GET.get("payment_id") or request.POST.get("payment_id") or request.POST.get("payment")
+    payment = None
+    if payment_id:
+        payment = Payment.objects.filter(pk=payment_id).first()
+        if payment and not invoice:
+            invoice = payment.invoice
+
     if request.method == "POST":
         title = request.POST.get("title", "").strip()
         description = request.POST.get("description", "").strip()
@@ -3383,6 +3395,8 @@ def patient_ticket_create(request):
                 category=category,
                 priority=priority if priority in Ticket.Priority.values else Ticket.Priority.NORMAL,
                 upload=upload,
+                invoice=invoice,
+                payment=payment,
             )
             messages.success(request, f"Ticket {ticket.number} has been created successfully.")
             return redirect("patient_ticket_detail", pk=ticket.pk)
@@ -3670,6 +3684,22 @@ def staff_ticket_create(request):
 
     departments = Department.objects.filter(is_active=True).order_by("name")
 
+    invoice_id = request.GET.get("invoice_id") or request.POST.get("invoice_id") or request.POST.get("invoice")
+    invoice = None
+    if invoice_id:
+        invoice = Invoice.objects.filter(pk=invoice_id).first()
+        if invoice and not patient and invoice.patient:
+            patient = invoice.patient
+
+    payment_id = request.GET.get("payment_id") or request.POST.get("payment_id") or request.POST.get("payment")
+    payment = None
+    if payment_id:
+        payment = Payment.objects.filter(pk=payment_id).first()
+        if payment and not invoice:
+            invoice = payment.invoice
+        if payment and not patient and payment.invoice.patient:
+            patient = payment.invoice.patient
+
     if request.method == "POST":
         title = request.POST.get("title", "").strip()
         description = request.POST.get("description", "").strip()
@@ -3692,6 +3722,8 @@ def staff_ticket_create(request):
                 patient=patient,
                 assigned_team=assigned_team,
                 upload=upload,
+                invoice=invoice,
+                payment=payment,
             )
             messages.success(request, f"Ticket {ticket.number} created successfully.")
             return redirect("staff_ticket_detail", pk=ticket.pk)
