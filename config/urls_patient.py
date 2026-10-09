@@ -54,5 +54,10 @@ urlpatterns = [
         views.patient_invoice_detail,
         name="patient_invoice_detail",
     ),
+    path(
+        "insurance/",
+        views.patient_insurance_workspace,
+        name="patient_insurance_workspace",
+    ),
     path("", include("config.portal_urls")),
 ]

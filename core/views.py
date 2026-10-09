@@ -41,6 +41,7 @@ from .forms import (
 )
 from .models import (
     Admission,
+    AbhaIntegrationConsent,
     Appointment,
     AuditEvent,
     Bed,
@@ -50,6 +51,7 @@ from .models import (
     Dispensing,
     DispensingLine,
     HospitalSettings,
+    InsurancePolicy,
     Invoice,
     InvoiceLine,
     Medicine,
@@ -3168,5 +3170,70 @@ def patient_invoice_detail(request, pk):
             "lines": invoice.lines.all(),
             "payments": invoice.payments.all(),
             "adjustments": invoice.adjustments.all(),
+        },
+    )
+
+
+def _mask_reference(ref):
+    if not ref:
+        return "—"
+    ref_str = str(ref).strip()
+    if len(ref_str) <= 4:
+        return "****"
+    return f"{'*' * (len(ref_str) - 4)}{ref_str[-4:]}"
+
+
+def patient_insurance_workspace(request):
+    patient = _get_verified_patient_for_request(request)
+
+    policies = (
+        InsurancePolicy.objects.filter(patient=patient)
+        .select_related("provider")
+        .prefetch_related("verifications")
+        .order_by("-effective_from", "-id")
+    )
+
+    masked_policies = []
+    for pol in policies:
+        masked_policies.append({
+            "policy": pol,
+            "masked_policy_reference": _mask_reference(pol.policy_reference),
+            "masked_member_reference": _mask_reference(pol.member_reference),
+            "latest_verification": pol.verifications.order_by("-created_at").first(),
+        })
+
+    now = timezone.now()
+    consents = (
+        AbhaIntegrationConsent.objects.filter(patient=patient)
+        .order_by("-granted_at", "-id")
+    )
+
+    masked_consents = []
+    for consent in consents:
+        is_active = (
+            consent.revoked_at is None
+            and consent.granted_at <= now <= consent.expires_at
+        )
+        masked_consents.append({
+            "consent": consent,
+            "is_active": is_active,
+            "masked_consent_reference": _mask_reference(consent.consent_reference),
+            "masked_link_reference": _mask_reference(consent.external_link_reference) if consent.external_link_reference else None,
+        })
+
+    _audit_clinical_access(
+        request,
+        "clinical.insurance_workspace_viewed",
+        "patient",
+        patient.pk,
+    )
+
+    return render(
+        request,
+        "core/patient/insurance_workspace.html",
+        {
+            "patient": patient,
+            "masked_policies": masked_policies,
+            "masked_consents": masked_consents,
         },
     )
