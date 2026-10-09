@@ -36,6 +36,7 @@
         <th>Doctor / Department</th>
         <th>Visit Type</th>
         <th>Status</th>
+        <th>Action</th>
       </tr>
     </thead>
     <tbody>
@@ -54,10 +55,18 @@
           <td>
             <span class="badge badge-info">{{ apt.get_status_display }}</span>
           </td>
+          <td>
+            {% if apt.status == "scheduled" %}
+              <form method="post" action="{% url 'patient_appointment_cancel' apt.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-stitch-secondary">Cancel</button>
+              </form>
+            {% endif %}
+          </td>
         </tr>
       {% empty %}
         <tr>
-          <td colspan="4" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">
+          <td colspan="5" style="text-align: center; color: var(--color-text-muted); padding: 2rem;">
             No upcoming appointments scheduled.
           </td>
         </tr>

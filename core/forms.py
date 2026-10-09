@@ -1,7 +1,7 @@
 import zoneinfo
 
 from django import forms
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.forms import inlineformset_factory
 from django.utils import timezone
 
@@ -51,6 +51,50 @@ def appointment_slot_conflicts(doctor, scheduled_at, exclude_pk=None):
     if exclude_pk:
         conflicts = conflicts.exclude(pk=exclude_pk)
     return conflicts.exists()
+
+
+def doctor_schedule_for_slot(doctor, scheduled_at):
+    """Return the active recurring schedule containing an aligned web-booking slot."""
+    local_slot = timezone.localtime(scheduled_at)
+    slot_minutes = local_slot.hour * 60 + local_slot.minute
+    schedules = DoctorSchedule.objects.filter(
+        doctor=doctor,
+        weekday=local_slot.weekday(),
+        is_active=True,
+    ).order_by("start_time")
+    for schedule in schedules:
+        start_minutes = schedule.start_time.hour * 60 + schedule.start_time.minute
+        end_minutes = schedule.end_time.hour * 60 + schedule.end_time.minute
+        duration = schedule.slot_duration_minutes
+        if (
+            start_minutes <= slot_minutes
+            and slot_minutes + duration <= end_minutes
+            and (slot_minutes - start_minutes) % duration == 0
+        ):
+            return schedule
+    return None
+
+
+def doctor_schedule_has_capacity(schedule, scheduled_at):
+    local_slot = timezone.localtime(scheduled_at)
+    tz = timezone.get_current_timezone()
+    session_start = timezone.make_aware(
+        datetime.combine(local_slot.date(), schedule.start_time), tz
+    )
+    session_end = timezone.make_aware(
+        datetime.combine(local_slot.date(), schedule.end_time), tz
+    )
+    active_count = Appointment.objects.filter(
+        doctor=schedule.doctor,
+        scheduled_at__gte=session_start,
+        scheduled_at__lt=session_end,
+        status__in=(
+            Appointment.Status.SCHEDULED,
+            Appointment.Status.CHECKED_IN,
+            Appointment.Status.IN_PROGRESS,
+        ),
+    ).count()
+    return active_count < schedule.max_patients
 
 
 class PatientForm(forms.ModelForm):
@@ -205,7 +249,18 @@ class PatientAppointmentBookingForm(forms.ModelForm):
         doctor = cleaned_data.get("doctor")
         scheduled_at = cleaned_data.get("scheduled_at")
         if doctor and scheduled_at:
-            if appointment_slot_conflicts(doctor, scheduled_at):
+            schedule = doctor_schedule_for_slot(doctor, scheduled_at)
+            if schedule is None:
+                self.add_error(
+                    "scheduled_at",
+                    "Select an available time from this doctor's published schedule.",
+                )
+            elif not doctor_schedule_has_capacity(schedule, scheduled_at):
+                self.add_error(
+                    "scheduled_at",
+                    "This doctor's published session is fully booked.",
+                )
+            elif appointment_slot_conflicts(doctor, scheduled_at):
                 self.add_error(
                     "scheduled_at",
                     "This doctor already has an overlapping active appointment.",

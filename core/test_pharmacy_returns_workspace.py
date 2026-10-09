@@ -29,6 +29,7 @@ from core.models import (
     ReturnLine,
     StaffProfile,
     StockReceipt,
+    StockMovement,
     Supplier,
 )
 from core.roles import configure_role_permissions
@@ -323,3 +324,50 @@ class PharmacyReturnsWorkspaceTests(TestCase):
         audit = AuditEvent.objects.filter(action="pharmacy.return_rejected", target_id=str(ret.pk)).first()
         self.assertIsNotNone(audit)
         self.assertEqual(audit.details.get("reason"), "Packaging is tampered")
+
+    def test_approved_refund_restores_stock_with_traceable_movement(self):
+        method = PaymentMethod.objects.create(name="Cash", code="CASH", is_active=True)
+        payment = Payment.objects.create(
+            receipt_number="PAY-RET-001",
+            invoice=self.sale_invoice,
+            method=method,
+            amount=Decimal("25.00"),
+            received_by=self.pharmacy_profile,
+            received_at=timezone.now(),
+        )
+        pharmacy_return = PharmacyReturn.objects.create(
+            number="RET-APPROVE-001",
+            reason="Sealed pack returned",
+            status=PharmacyReturn.Status.PENDING,
+            created_by=self.pharmacy_profile,
+            request_key=uuid.uuid4(),
+        )
+        ReturnLine.objects.create(
+            pharmacy_return=pharmacy_return,
+            sale_line=self.sale_line,
+            quantity=Decimal("2.000"),
+            refund_amount=Decimal("5.00"),
+        )
+        before = self.batch.quantity_on_hand
+
+        self.client.force_login(self.admin_user)
+        response = self.client.post(
+            reverse("invoice_refund", args=[self.sale_invoice.pk]),
+            {
+                "payment": payment.pk,
+                "pharmacy_return": pharmacy_return.pk,
+                "amount": "5.00",
+                "reason": "Approved sealed return",
+            },
+            HTTP_HOST="staff.hms.test",
+        )
+        self.assertEqual(response.status_code, 302)
+        pharmacy_return.refresh_from_db()
+        self.batch.refresh_from_db()
+        self.assertEqual(pharmacy_return.status, PharmacyReturn.Status.APPROVED)
+        self.assertEqual(self.batch.quantity_on_hand, before + Decimal("2.000"))
+        movement = StockMovement.objects.get(
+            kind=StockMovement.Kind.RETURN,
+            reference_id=str(pharmacy_return.pk),
+        )
+        self.assertEqual(movement.quantity_delta, Decimal("2.000"))

@@ -16,6 +16,7 @@ from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .authorization import (
     doctor_patient_queryset,
@@ -35,6 +36,8 @@ from .forms import (
     PrescriptionItemFormSet,
     SupplierForm,
     appointment_slot_conflicts,
+    doctor_schedule_for_slot,
+    doctor_schedule_has_capacity,
 )
 from .models import (
     Admission,
@@ -220,6 +223,16 @@ def robots_txt(request):
 
 def _has_role(user, role):
     return user.groups.filter(name=role).exists()
+
+
+def _safe_redirect(request, candidate, fallback):
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(candidate)
+    return redirect(fallback)
 
 
 def _patient_read_queryset(user):
@@ -570,6 +583,34 @@ def invoice_refund(request, pk):
         if pharmacy_return:
             pharmacy_return.status = PharmacyReturn.Status.APPROVED
             pharmacy_return.save(update_fields=("status", "updated_at"))
+            for return_line in return_lines.select_related(
+                "sale_line__batch", "dispensing_line__batch"
+            ):
+                source_batch = (
+                    return_line.sale_line.batch
+                    if return_line.sale_line_id
+                    else return_line.dispensing_line.batch
+                )
+                batch = MedicineBatch.objects.select_for_update().get(
+                    pk=source_batch.pk
+                )
+                before = batch.quantity_on_hand
+                batch.quantity_on_hand = before + return_line.quantity
+                batch.save(update_fields=("quantity_on_hand", "updated_at"))
+                StockMovement.objects.create(
+                    batch=batch,
+                    kind=StockMovement.Kind.RETURN,
+                    quantity_delta=return_line.quantity,
+                    quantity_before=before,
+                    quantity_after=batch.quantity_on_hand,
+                    reference_type="pharmacy_return",
+                    reference_id=str(pharmacy_return.pk),
+                    request_key=uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        f"pharmacy-return:{pharmacy_return.pk}:line:{return_line.pk}",
+                    ),
+                    actor=actor,
+                )
         _audit_financial_change(
             request,
             "financial.refund_issued",
@@ -1260,9 +1301,9 @@ def stock_receipt_create(request):
         or sale_price < 0
     ):
         return HttpResponseBadRequest("Receipt amounts are outside the valid range.")
-    redirect_url = request.POST.get("next") or "stock_receipt_list"
+    redirect_url = request.POST.get("next")
     if StockMovement.objects.filter(request_key=request_key).exists():
-        return redirect(redirect_url)
+        return _safe_redirect(request, redirect_url, "stock_receipt_list")
 
     if quantity_received <= 0:
         return HttpResponseBadRequest("Quantity received must be positive.")
@@ -1270,12 +1311,24 @@ def stock_receipt_create(request):
     expiry_date = parse_date(request.POST.get("expiry_date", ""))
     if not expiry_date:
         return HttpResponseBadRequest("A valid expiry date is required.")
+    if expiry_date < timezone.localdate():
+        return HttpResponseBadRequest("Expired stock cannot be received.")
 
     actor_profile = StaffProfile.objects.filter(user=request.user).first()
 
     with transaction.atomic():
+        Medicine.objects.select_for_update().get(pk=medicine.pk)
         if StockMovement.objects.filter(request_key=request_key).exists():
-            return redirect(redirect_url)
+            return _safe_redirect(request, redirect_url, "stock_receipt_list")
+        batch_number = request.POST.get("batch_number", "").strip()
+        if not batch_number:
+            return HttpResponseBadRequest("A batch number is required.")
+        if MedicineBatch.objects.filter(
+            medicine=medicine, batch_number__iexact=batch_number
+        ).exists():
+            return HttpResponse(
+                "This medicine batch has already been received.", status=409
+            )
         receipt = StockReceipt.objects.create(
             number=next_number("STOCK_RECEIPT"),
             supplier=supplier,
@@ -1286,8 +1339,7 @@ def stock_receipt_create(request):
         batch = MedicineBatch.objects.create(
             medicine=medicine,
             receipt=receipt,
-            batch_number=request.POST.get("batch_number", "").strip()
-            or "BATCH-UNKNOWN",
+            batch_number=batch_number,
             expiry_date=expiry_date,
             purchase_price=purchase_price,
             sale_price=sale_price,
@@ -1324,7 +1376,7 @@ def stock_receipt_create(request):
         request,
         f"Stock intake recorded for {medicine.generic_name} ({batch.batch_number}) under receipt {receipt.number}.",
     )
-    return redirect(redirect_url)
+    return _safe_redirect(request, redirect_url, "stock_receipt_list")
 
 
 @permission_required("core.add_pharmacysale", raise_exception=True)
@@ -1362,6 +1414,14 @@ def pharmacy_sale_create(request):
             return HttpResponseBadRequest("Quarantined stock cannot be sold.")
         if batch.quantity_on_hand < quantity:
             return HttpResponseBadRequest("Insufficient stock available for sale.")
+        payment_methods = PaymentMethod.objects.filter(is_active=True)
+        payment_method_id = request.POST.get("payment_method")
+        payment_method = (
+            get_object_or_404(payment_methods, pk=payment_method_id)
+            if payment_method_id
+            else payment_methods.order_by("pk").first()
+        )
+        payment_reference = request.POST.get("payment_reference", "").strip()
         if StockMovement.objects.filter(request_key=request_key).exists():
             return redirect("pharmacy_prescription_list")
 
@@ -1392,6 +1452,17 @@ def pharmacy_sale_create(request):
             sold_at=timezone.now(),
             sold_by=actor,
         )
+        payment = None
+        if payment_method is not None:
+            payment = Payment.objects.create(
+                receipt_number=next_number("RECEIPT"),
+                invoice=invoice,
+                method=payment_method,
+                amount=total,
+                reference=payment_reference,
+                received_by=actor,
+                received_at=timezone.now(),
+            )
         line = PharmacySaleLine.objects.create(
             sale=sale,
             batch=batch,
@@ -1418,7 +1489,12 @@ def pharmacy_sale_create(request):
             action="pharmacy.sale_created",
             target_type="pharmacysale",
             target_id=str(sale.pk),
-            details={"invoice_id": invoice.pk, "line_id": line.pk},
+            details={
+                "invoice_id": invoice.pk,
+                "line_id": line.pk,
+                "payment_id": payment.pk if payment else None,
+                "payment_method": payment_method.code if payment_method else None,
+            },
         )
     messages.success(request, f"Pharmacy sale {sale.number} recorded.")
     return redirect("pharmacy_sale_detail", pk=sale.pk)
@@ -1574,14 +1650,14 @@ def stock_adjustment(request, pk):
         return HttpResponseBadRequest("Stock adjustment must be a valid number.")
     if not delta.is_finite() or delta == 0:
         return HttpResponseBadRequest("Stock adjustment must be nonzero.")
-    redirect_url = request.POST.get("next") or "pharmacy_prescription_list"
+    redirect_url = request.POST.get("next")
     if StockMovement.objects.filter(request_key=request_key).exists():
-        return redirect(redirect_url)
+        return _safe_redirect(request, redirect_url, "pharmacy_prescription_list")
 
     with transaction.atomic():
         batch = get_object_or_404(MedicineBatch.objects.select_for_update(), pk=pk)
         if StockMovement.objects.filter(request_key=request_key).exists():
-            return redirect(redirect_url)
+            return _safe_redirect(request, redirect_url, "pharmacy_prescription_list")
         before = batch.quantity_on_hand
         after = before + delta
         if after < 0:
@@ -1607,7 +1683,7 @@ def stock_adjustment(request, pk):
             actor=audit.actor,
         )
     messages.success(request, f"Stock adjusted for batch {batch.batch_number}.")
-    return redirect(redirect_url)
+    return _safe_redirect(request, redirect_url, "pharmacy_prescription_list")
 
 
 @permission_required("core.adjust_stock", raise_exception=True)
@@ -1623,12 +1699,16 @@ def batch_quarantine(request, pk):
     value = request.POST.get("is_quarantined", "")
     if not reason or value not in {"true", "false"}:
         return HttpResponseBadRequest("A reason and quarantine state are required.")
-    redirect_url = request.POST.get("next") or "pharmacy_prescription_list"
+    redirect_url = request.POST.get("next")
     if AuditEvent.objects.filter(details__request_key=str(request_key)).exists():
-        return redirect(redirect_url)
+        return _safe_redirect(request, redirect_url, "pharmacy_prescription_list")
 
     with transaction.atomic():
         batch = get_object_or_404(MedicineBatch.objects.select_for_update(), pk=pk)
+        if AuditEvent.objects.filter(
+            details__request_key=str(request_key)
+        ).exists():
+            return _safe_redirect(request, redirect_url, "pharmacy_prescription_list")
         batch.is_quarantined = value == "true"
         batch.save(update_fields=("is_quarantined", "updated_at"))
         AuditEvent.objects.create(
@@ -1644,7 +1724,7 @@ def batch_quarantine(request, pk):
         )
     state_label = "quarantined" if batch.is_quarantined else "released from quarantine"
     messages.success(request, f"Batch {batch.batch_number} {state_label}.")
-    return redirect(redirect_url)
+    return _safe_redirect(request, redirect_url, "pharmacy_prescription_list")
 
 
 @permission_required("core.add_dispensing", raise_exception=True)
@@ -1852,6 +1932,7 @@ def pharmacy_prescription_list(request):
             .select_related("medicine")
             .order_by("expiry_date", "pk"),
             "sale_request_key": uuid.uuid4(),
+            "payment_methods": PaymentMethod.objects.filter(is_active=True),
             "query": query,
         },
     )
@@ -2604,7 +2685,7 @@ def patient_dashboard(request):
             ],
         )
         .select_related("doctor__user", "visit_type")
-        .order_by("scheduled_at")
+        .order_by("scheduled_at")[:10]
     )
 
     past_appointments = (
@@ -2618,7 +2699,7 @@ def patient_dashboard(request):
         Prescription.objects.filter(patient=patient)
         .select_related("doctor__user")
         .prefetch_related("items__medicine")
-        .order_by("-issued_at")
+        .order_by("-issued_at")[:10]
     )
 
     documents = (
@@ -2627,13 +2708,13 @@ def patient_dashboard(request):
             validation_status=PatientDocument.ValidationStatus.CLEAN,
         )
         .select_related("uploaded_by__user")
-        .order_by("-created_at")
+        .order_by("-created_at")[:10]
     )
 
     invoices = (
         Invoice.objects.filter(patient=patient)
         .prefetch_related("lines", "payments")
-        .order_by("-issued_at")
+        .order_by("-issued_at")[:10]
     )
 
     return render(
@@ -2724,7 +2805,18 @@ def patient_appointment_book(request):
 
                 # Serialize slot checks for the selected doctor
                 StaffProfile.objects.select_for_update().get(pk=doctor.pk)
-                if appointment_slot_conflicts(doctor, scheduled_at):
+                schedule = doctor_schedule_for_slot(doctor, scheduled_at)
+                if schedule is None:
+                    form.add_error(
+                        "scheduled_at",
+                        "Select an available time from this doctor's published schedule.",
+                    )
+                elif not doctor_schedule_has_capacity(schedule, scheduled_at):
+                    form.add_error(
+                        "scheduled_at",
+                        "This doctor's published session is fully booked.",
+                    )
+                elif appointment_slot_conflicts(doctor, scheduled_at):
                     form.add_error(
                         "scheduled_at",
                         "This doctor already has an overlapping active appointment.",
@@ -2758,5 +2850,40 @@ def patient_appointment_book(request):
         {
             "patient": patient,
             "form": form,
+            "doctor_prices": [
+                (doctor, doctor.get_consultation_price())
+                for doctor in form.fields["doctor"].queryset.prefetch_related(
+                    "schedules"
+                )
+            ],
         },
     )
+
+
+def patient_appointment_cancel(request, pk):
+    patient = _get_verified_patient_for_request(request)
+    if request.method != "POST":
+        return HttpResponseBadRequest("Appointment cancellation requires POST.")
+    with transaction.atomic():
+        appointment = get_object_or_404(
+            Appointment.objects.select_for_update(),
+            pk=pk,
+            patient=patient,
+        )
+        if appointment.status == Appointment.Status.CANCELLED:
+            return redirect("patient_dashboard")
+        if appointment.status != Appointment.Status.SCHEDULED:
+            return HttpResponse(
+                "Only scheduled appointments can be cancelled.", status=409
+            )
+        appointment.status = Appointment.Status.CANCELLED
+        appointment.cancelled_at = timezone.now()
+        appointment.save(update_fields=("status", "cancelled_at", "updated_at"))
+        _audit_appointment_change(
+            request,
+            appointment,
+            "appointment.cancelled",
+            {"source": "patient_portal"},
+        )
+    messages.success(request, "Your appointment has been cancelled.")
+    return redirect("patient_dashboard")

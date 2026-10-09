@@ -137,7 +137,7 @@
       <h2 style="font-size: 1.15rem; font-weight: 700; margin: 0;">Over-The-Counter (OTC) Direct Sale</h2>
       <span class="badge badge-success">Direct Walk-In Cashier</span>
     </div>
-    <form method="post" action="{% url 'pharmacy_sale_create' %}" style="display: grid; grid-template-columns: 2fr 1fr auto; gap: 1rem; align-items: flex-end; margin-top: 1rem;">
+    <form method="post" action="{% url 'pharmacy_sale_create' %}" style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 1rem; align-items: flex-end; margin-top: 1rem;">
       {% csrf_token %}
       <input type="hidden" name="request_key" value="{{ sale_request_key }}">
       <div>
@@ -151,6 +151,16 @@
       <div>
         <label style="display: block; font-size: 0.8125rem; font-weight: 700; color: var(--color-secondary); margin-bottom: 0.35rem;">Quantity</label>
         <input type="number" name="quantity" min="0.001" step="0.001" required placeholder="1" class="clinical-input">
+      </div>
+      <div>
+        <label style="display: block; font-size: 0.8125rem; font-weight: 700; color: var(--color-secondary); margin-bottom: 0.35rem;">Payment Method</label>
+        <select name="payment_method" required class="clinical-input">
+          {% for method in payment_methods %}<option value="{{ method.pk }}">{{ method.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="display: block; font-size: 0.8125rem; font-weight: 700; color: var(--color-secondary); margin-bottom: 0.35rem;">Payment Reference</label>
+        <input type="text" name="payment_reference" maxlength="100" class="clinical-input" placeholder="UTR / terminal ref">
       </div>
       <button type="submit" class="btn-stitch-primary" style="height: 44px; padding: 0 1.5rem;"{% if not otc_batches %} disabled{% endif %}>
         Create OTC sale

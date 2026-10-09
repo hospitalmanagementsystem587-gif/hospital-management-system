@@ -15,6 +15,16 @@
   </div>
 
   <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 2rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+    <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 8px;">
+      <strong>Published availability and consultation fees</strong>
+      <ul>
+        {% for doctor, price in doctor_prices %}
+          <li>{{ doctor }} — ₹{{ price|floatformat:2 }}
+            {% for schedule in doctor.schedules.all %}{% if schedule.is_active %}<span class="badge badge-info">{{ schedule.get_weekday_display }} {{ schedule.start_time|time:"H:i" }}–{{ schedule.end_time|time:"H:i" }}</span>{% endif %}{% endfor %}
+          </li>
+        {% empty %}<li>No doctors currently have published availability.</li>{% endfor %}
+      </ul>
+    </div>
     {% if form.non_field_errors %}
       <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 0.875rem;">
         {% for err in form.non_field_errors %}

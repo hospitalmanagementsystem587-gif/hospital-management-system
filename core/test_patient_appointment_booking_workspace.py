@@ -7,6 +7,7 @@ from django.utils import timezone
 from core.models import (
     Appointment,
     Department,
+    DoctorSchedule,
     Patient,
     PatientAccount,
     StaffProfile,
@@ -131,6 +132,17 @@ class PatientAppointmentBookingWorkspaceTests(TestCase):
             is_verified=True,
         )
 
+        for weekday in range(7):
+            DoctorSchedule.objects.create(
+                doctor=cls.doctor,
+                weekday=weekday,
+                start_time="00:00",
+                end_time="23:59",
+                slot_duration_minutes=1,
+                max_patients=1000,
+                is_active=True,
+            )
+
     def setUp(self):
         self.client = Client(HTTP_HOST="patient.hms.test")
 
@@ -163,6 +175,7 @@ class PatientAppointmentBookingWorkspaceTests(TestCase):
         # Inactive doctor / inactive visit type should not be available options
         self.assertNotContains(resp, "DOC-INACT-02")
         self.assertNotContains(resp, "Inactive Consultation")
+        self.assertContains(resp, "₹500.00")
 
     def test_successful_appointment_booking(self):
         self.client.force_login(self.patient_user)
@@ -245,3 +258,73 @@ class PatientAppointmentBookingWorkspaceTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "overlapping active appointment")
         self.assertFalse(Appointment.objects.filter(patient=self.patient).exists())
+
+    def test_cannot_book_outside_published_doctor_schedule(self):
+        self.doctor.schedules.all().delete()
+        self.client.force_login(self.patient_user)
+        future_time = timezone.now() + timedelta(days=5)
+        response = self.client.post(
+            "/appointments/book/",
+            {
+                "doctor": self.doctor.pk,
+                "visit_type": self.visit_type.pk,
+                "scheduled_at": future_time.strftime("%Y-%m-%dT%H:%M"),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "published schedule")
+        self.assertFalse(Appointment.objects.filter(patient=self.patient).exists())
+
+    def test_patient_can_cancel_only_own_scheduled_appointment(self):
+        own = Appointment.objects.create(
+            patient=self.patient,
+            doctor=self.doctor,
+            visit_type=self.visit_type,
+            scheduled_at=timezone.now() + timedelta(days=6),
+            status=Appointment.Status.SCHEDULED,
+        )
+        other = Appointment.objects.create(
+            patient=self.other_patient,
+            doctor=self.doctor,
+            visit_type=self.visit_type,
+            scheduled_at=timezone.now() + timedelta(days=7),
+            status=Appointment.Status.SCHEDULED,
+        )
+        self.client.force_login(self.patient_user)
+        self.assertEqual(
+            self.client.post(f"/appointments/{other.pk}/cancel/").status_code,
+            404,
+        )
+        response = self.client.post(f"/appointments/{own.pk}/cancel/")
+        self.assertEqual(response.status_code, 302)
+        own.refresh_from_db()
+        self.assertEqual(own.status, Appointment.Status.CANCELLED)
+        self.assertIsNotNone(own.cancelled_at)
+
+    def test_fully_booked_schedule_is_rejected(self):
+        future_time = timezone.localtime(timezone.now() + timedelta(days=8)).replace(
+            second=0, microsecond=0
+        )
+        schedule = self.doctor.schedules.get(weekday=future_time.weekday())
+        schedule.max_patients = 1
+        schedule.save(update_fields=("max_patients", "updated_at"))
+        Appointment.objects.create(
+            patient=self.other_patient,
+            doctor=self.doctor,
+            visit_type=self.visit_type,
+            scheduled_at=future_time.replace(hour=0, minute=0),
+            status=Appointment.Status.SCHEDULED,
+        )
+        self.client.force_login(self.patient_user)
+        response = self.client.post(
+            "/appointments/book/",
+            {
+                "doctor": self.doctor.pk,
+                "visit_type": self.visit_type.pk,
+                "scheduled_at": future_time.replace(hour=12, minute=0).strftime(
+                    "%Y-%m-%dT%H:%M"
+                ),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "fully booked")

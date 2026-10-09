@@ -243,6 +243,30 @@ class StockReceivingWorkspaceTests(TestCase):
         self.assertEqual(MedicineBatch.objects.filter(batch_number="BAT-IDEM-01").count(), 1)
         self.assertEqual(StockReceipt.objects.filter(supplier_reference="INV-IDEMPOTENT").count(), 1)
 
+    def test_stock_receipt_next_cannot_redirect_off_site(self):
+        self.client.force_login(self.pharmacy_user)
+        response = self.client.post(
+            "/pharmacy/stock-receipts/create/",
+            {
+                "request_key": str(uuid.uuid4()),
+                "supplier": self.supplier.pk,
+                "supplier_reference": "INV-SAFE-REDIRECT",
+                "medicine": self.med_cipro.pk,
+                "batch_number": "BAT-SAFE-REDIRECT",
+                "expiry_date": str(timezone.localdate() + timedelta(days=90)),
+                "quantity_received": "5.000",
+                "purchase_price": "3.00",
+                "sale_price": "5.00",
+                "next": "https://attacker.example/phish",
+            },
+            HTTP_HOST="store.hms.test",
+        )
+        self.assertRedirects(
+            response,
+            "/store/receipts/",
+            fetch_redirect_response=False,
+        )
+
     def test_inactive_supplier_rejected(self):
         self.client.force_login(self.pharmacy_user)
         req_key = uuid.uuid4()
@@ -263,6 +287,37 @@ class StockReceivingWorkspaceTests(TestCase):
         )
         self.assertEqual(res.status_code, 400)
         self.assertContains(res, "Cannot receive stock from an inactive supplier", status_code=400)
+
+    def test_duplicate_batch_and_expired_stock_are_rejected(self):
+        self.client.force_login(self.pharmacy_user)
+        base = {
+            "supplier": self.supplier.pk,
+            "supplier_reference": "INV-INVALID-BATCH",
+            "medicine": self.med_cipro.pk,
+            "batch_number": self.existing_batch.batch_number,
+            "expiry_date": str(timezone.localdate() + timedelta(days=30)),
+            "quantity_received": "5.000",
+            "purchase_price": "3.00",
+            "sale_price": "5.00",
+        }
+        response = self.client.post(
+            "/pharmacy/stock-receipts/create/",
+            {**base, "request_key": str(uuid.uuid4())},
+            HTTP_HOST="store.hms.test",
+        )
+        self.assertEqual(response.status_code, 409)
+
+        response = self.client.post(
+            "/pharmacy/stock-receipts/create/",
+            {
+                **base,
+                "request_key": str(uuid.uuid4()),
+                "batch_number": "BAT-EXPIRED-NEW",
+                "expiry_date": str(timezone.localdate() - timedelta(days=1)),
+            },
+            HTTP_HOST="store.hms.test",
+        )
+        self.assertEqual(response.status_code, 400)
 
     def test_inactive_medicine_rejected(self):
         self.client.force_login(self.pharmacy_user)

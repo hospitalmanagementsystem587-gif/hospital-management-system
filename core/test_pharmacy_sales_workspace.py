@@ -15,6 +15,8 @@ from core.models import (
     Medicine,
     MedicineBatch,
     NumberSequence,
+    Payment,
+    PaymentMethod,
     PharmacySale,
     PharmacySaleLine,
     StaffProfile,
@@ -43,6 +45,7 @@ class PharmacySalesWorkspaceTests(TestCase):
         super().setUpTestData()
         NumberSequence.objects.get_or_create(code="INVOICE", defaults={"prefix": "INV-", "next_value": 1000})
         NumberSequence.objects.get_or_create(code="PHARMACY_SALE", defaults={"prefix": "SALE-", "next_value": 1000})
+        NumberSequence.objects.get_or_create(code="RECEIPT", defaults={"prefix": "PAY-", "next_value": 1000})
         configure_role_permissions()
 
         cls.pharmacy_user = User.objects.create_user("pharmacy_user_pos", password="password")
@@ -57,6 +60,9 @@ class PharmacySalesWorkspaceTests(TestCase):
         cls.doctor_profile = StaffProfile.objects.create(
             user=cls.doctor_user,
             employee_id="DOC-POS-1",
+        )
+        cls.payment_method = PaymentMethod.objects.create(
+            name="UPI", code="UPI", is_active=True
         )
 
         cls.supplier = Supplier.objects.create(code="SUP-POS", name="POS Supplier Ltd")
@@ -177,6 +183,8 @@ class PharmacySalesWorkspaceTests(TestCase):
             "batch": self.batch_valid.pk,
             "quantity": "4.000",
             "request_key": req_key,
+            "payment_method": self.payment_method.pk,
+            "payment_reference": "UPI-REF-1001",
         }
 
         res = self.client.post(url, post_data, HTTP_HOST="store.hms.test")
@@ -198,6 +206,10 @@ class PharmacySalesWorkspaceTests(TestCase):
         invoice = sale.invoice
         self.assertIsNone(invoice.patient)
         self.assertEqual(invoice.total, Decimal("10.00"))
+        payment = Payment.objects.get(invoice=invoice)
+        self.assertEqual(payment.amount, Decimal("10.00"))
+        self.assertEqual(payment.method, self.payment_method)
+        self.assertEqual(payment.reference, "UPI-REF-1001")
 
         mvt = StockMovement.objects.get(request_key=req_key)
         self.assertEqual(mvt.kind, StockMovement.Kind.SALE)
@@ -320,6 +332,8 @@ class PharmacySalesWorkspaceTests(TestCase):
             "batch": self.batch_valid.pk,
             "quantity": "2.000",
             "request_key": req_key,
+            "payment_method": self.payment_method.pk,
+            "payment_reference": "IDEMPOTENT-PAYMENT",
         }
 
         res1 = self.client.post(url, payload, HTTP_HOST="store.hms.test")
