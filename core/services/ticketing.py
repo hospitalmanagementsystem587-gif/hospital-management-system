@@ -260,7 +260,7 @@ def can_access_ticket(user, ticket, *, write=False):
         return ticket.assigned_to_id == profile.pk
     if ticket.assigned_team_id:
         return ticket.assigned_team_id == profile.department_id
-    # Unassigned tickets in agent's department or unassigned department are viewable by agent
+    # Unassigned tickets (no assigned_to and no assigned_team) are accessible to support agents/staff in the queue
     return True
 
 

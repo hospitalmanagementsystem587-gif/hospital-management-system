@@ -3617,7 +3617,7 @@ def staff_ticket_list(request):
     if not (
         request.user.is_superuser
         or request.user.has_perm("core.view_ticket")
-        or request.user.groups.filter(name__in=["Administrator", "Doctor", "Reception"]).exists()
+        or request.user.groups.filter(name__in=["Administrator", "Doctor", "Reception", "Pharmacy"]).exists()
     ):
         raise PermissionDenied("You do not have access to staff tickets.")
 
@@ -3657,7 +3657,7 @@ def staff_ticket_create(request):
     if not (
         request.user.is_superuser
         or request.user.has_perm("core.add_ticket")
-        or request.user.groups.filter(name__in=["Administrator", "Doctor", "Reception"]).exists()
+        or request.user.groups.filter(name__in=["Administrator", "Doctor", "Reception", "Pharmacy"]).exists()
     ):
         raise PermissionDenied("You do not have permission to create support tickets.")
 

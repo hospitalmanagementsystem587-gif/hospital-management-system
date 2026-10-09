@@ -67,6 +67,13 @@ ROLE_PERMISSIONS = {
         "core.view_returnline",
         "core.add_returnline",
         "core.view_paymentmethod",
+        "core.view_ticket",
+        "core.add_ticket",
+        "core.change_ticket",
+        "core.view_ticketmessage",
+        "core.add_ticketmessage",
+        "core.view_ticketattachment",
+        "core.add_ticketattachment",
     ),
     "Doctor": (
         "core.view_patient",
