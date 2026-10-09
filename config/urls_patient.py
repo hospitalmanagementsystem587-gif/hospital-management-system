@@ -59,5 +59,15 @@ urlpatterns = [
         views.patient_insurance_workspace,
         name="patient_insurance_workspace",
     ),
+    path(
+        "feedback/",
+        views.patient_feedback_workspace,
+        name="patient_feedback_workspace",
+    ),
+    path(
+        "feedback/submit/",
+        views.patient_feedback_submit,
+        name="patient_feedback_submit",
+    ),
     path("", include("config.portal_urls")),
 ]

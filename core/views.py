@@ -58,6 +58,7 @@ from .models import (
     MedicineBatch,
     Patient,
     PatientDocument,
+    PatientFeedback,
     Payment,
     PaymentMethod,
     PharmacySale,
@@ -3237,3 +3238,100 @@ def patient_insurance_workspace(request):
             "masked_consents": masked_consents,
         },
     )
+
+
+def patient_feedback_workspace(request):
+    patient = _get_verified_patient_for_request(request)
+
+    feedbacks = (
+        PatientFeedback.objects.filter(patient=patient)
+        .select_related("appointment__doctor__user", "appointment__visit_type", "doctor__user")
+        .order_by("-created_at")
+    )
+
+    # Completed appointments eligible for new feedback
+    submitted_appointment_ids = feedbacks.values_list("appointment_id", flat=True)
+    eligible_appointments = (
+        Appointment.objects.filter(
+            patient=patient,
+            status=Appointment.Status.COMPLETED,
+        )
+        .exclude(id__in=submitted_appointment_ids)
+        .select_related("doctor__user", "visit_type")
+        .order_by("-scheduled_at")
+    )
+
+    _audit_clinical_access(
+        request,
+        "clinical.feedback_workspace_viewed",
+        "patient",
+        patient.pk,
+    )
+
+    return render(
+        request,
+        "core/patient/feedback_workspace.html",
+        {
+            "patient": patient,
+            "feedbacks": feedbacks,
+            "eligible_appointments": eligible_appointments,
+            "categories": PatientFeedback.Category.choices,
+        },
+    )
+
+
+def patient_feedback_submit(request):
+    patient = _get_verified_patient_for_request(request)
+
+    if request.method != "POST":
+        return redirect("patient_feedback_workspace")
+
+    appointment_id = request.POST.get("appointment")
+    rating_raw = request.POST.get("rating")
+    category = request.POST.get("category", PatientFeedback.Category.DOCTOR_CONSULTATION).strip()
+    comment = request.POST.get("comment", "").strip()[:2000]
+    is_anonymous_public = request.POST.get("is_anonymous_public") == "on"
+
+    appointment = get_object_or_404(
+        Appointment.objects.filter(
+            patient=patient,
+            status=Appointment.Status.COMPLETED,
+        ),
+        pk=appointment_id,
+    )
+
+    if PatientFeedback.objects.filter(appointment=appointment).exists():
+        messages.error(request, "Feedback has already been submitted for this consultation.")
+        return redirect("patient_feedback_workspace")
+
+    try:
+        rating = int(rating_raw)
+        if rating < 1 or rating > 5:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Please provide a valid rating from 1 to 5 stars.")
+        return redirect("patient_feedback_workspace")
+
+    if category not in dict(PatientFeedback.Category.choices):
+        category = PatientFeedback.Category.DOCTOR_CONSULTATION
+
+    feedback = PatientFeedback.objects.create(
+        patient=patient,
+        appointment=appointment,
+        doctor=appointment.doctor,
+        rating=rating,
+        category=category,
+        comment=comment,
+        is_anonymous_public=is_anonymous_public,
+        status=PatientFeedback.Status.PENDING,
+    )
+
+    _audit_clinical_access(
+        request,
+        "clinical.feedback_submitted",
+        "patient_feedback",
+        feedback.pk,
+    )
+
+    messages.success(request, "Thank you! Your feedback has been received and submitted for review.")
+    return redirect("patient_feedback_workspace")
