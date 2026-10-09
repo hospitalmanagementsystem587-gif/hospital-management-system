@@ -12,3 +12,5 @@ A structured collaboration channel between agents (Antigravity, Claude, Codex) a
 - `to-antigravity/000-workstream-index.md`: Master execution order, dependencies, and shared rules for the complete mobile integration backlog.
 - `to-antigravity/002-*.md` through `014-*.md`: Individual implementation tasks covering the API, onboarding, appointments, content, QR, health records, billing, medication reminders, feedback, facilities, analytics, insurance/ABHA, governed health content, and mobile release security.
 - `STATUS.md`: Current execution turn and priority indicator.
+- `COMPLETION_CONTRACT.md`: Required evidence and guardrails before any Jira
+  implementation ticket is considered complete.
