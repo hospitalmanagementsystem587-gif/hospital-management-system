@@ -1977,3 +1977,32 @@ class Ticket(TimestampedModel):
             self.closed_at = None
 
         super().save(*args, **kwargs)
+
+
+class TicketMessage(TimestampedModel):
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="ticket_messages",
+    )
+    body = models.TextField(max_length=5000)
+    is_internal = models.BooleanField(
+        default=False,
+        help_text="If true, visible only to hospital staff and hidden from patient portal.",
+    )
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["ticket", "created_at"], name="ticket_msg_ticket_created_idx"),
+            models.Index(fields=["ticket", "is_internal"], name="ticket_msg_internal_idx"),
+        ]
+
+    def __str__(self):
+        msg_type = "Internal note" if self.is_internal else "Reply"
+        return f"{self.ticket.number} - {msg_type} by {self.author.username}"

@@ -53,6 +53,7 @@ from .models import (
     StaffProfile,
     Supplier,
     Ticket,
+    TicketMessage,
     VisitType,
 )
 
@@ -1000,6 +1001,12 @@ class PriceAdmin(admin.ModelAdmin):
             )
 
 
+class TicketMessageInline(admin.TabularInline):
+    model = TicketMessage
+    extra = 0
+    readonly_fields = ("created_at",)
+
+
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = (
@@ -1015,3 +1022,12 @@ class TicketAdmin(admin.ModelAdmin):
     list_filter = ("status", "priority", "category", "created_at")
     search_fields = ("number", "title", "description", "patient__full_name", "patient__mrn")
     readonly_fields = ("number", "created_at", "updated_at", "resolved_at", "closed_at")
+    inlines = [TicketMessageInline]
+
+
+@admin.register(TicketMessage)
+class TicketMessageAdmin(admin.ModelAdmin):
+    list_display = ("ticket", "author", "is_internal", "created_at")
+    list_filter = ("is_internal", "created_at")
+    search_fields = ("ticket__number", "body", "author__username")
+    readonly_fields = ("created_at", "updated_at")
