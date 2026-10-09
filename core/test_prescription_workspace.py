@@ -195,16 +195,23 @@ class PrescriptionWorkspaceTests(TestCase):
             ).exists()
         )
 
-    def test_pharmacy_and_admin_can_view_issued_prescription_for_print(self):
-        for user in (self.pharmacy_user, self.admin_user):
-            with self.subTest(user=user.username):
-                self.client.force_login(user)
-                response = self.client.get(
-                    f"/prescriptions/{self.prescription.pk}/print/",
-                    HTTP_HOST="staff.hms.test",
-                )
-                self.assertEqual(response.status_code, 200)
-                self.assertContains(response, "RX-000201")
+    def test_pharmacy_can_print_issued_prescription_and_admin_is_denied(self):
+        self.client.force_login(self.pharmacy_user)
+        response = self.client.get(
+            f"/prescriptions/{self.prescription.pk}/print/",
+            HTTP_HOST="staff.hms.test",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "RX-000201")
+
+        self.client.force_login(self.admin_user)
+        self.assertEqual(
+            self.client.get(
+                f"/prescriptions/{self.prescription.pk}/print/",
+                HTTP_HOST="staff.hms.test",
+            ).status_code,
+            403,
+        )
 
     def test_prescription_formset_excludes_inactive_medicines(self):
         from core.forms import PrescriptionItemFormSet

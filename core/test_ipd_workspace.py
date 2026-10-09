@@ -136,6 +136,56 @@ class IPDWorkspaceTests(TestCase):
                 self.assertContains(response, "ADM-000301")
                 self.assertContains(response, "Ian Inpatient")
 
+    def test_doctor_cannot_access_or_discharge_another_doctors_admission(self):
+        other_user = User.objects.create_user("other_ipd_doctor", password="password")
+        other_user.groups.add(Group.objects.get(name="Doctor"))
+        other_profile = StaffProfile.objects.create(
+            user=other_user,
+            employee_id="DOC-IPD-OTHER",
+        )
+        other_patient = Patient.objects.create(
+            mrn="PAT-IPD-OTHER",
+            full_name="Other Doctor Patient",
+        )
+        other_bed = Bed.objects.create(
+            ward=self.ward,
+            bed_number="DPW-OTHER",
+            status=Bed.Status.OCCUPIED,
+        )
+        other_admission = Admission.objects.create(
+            admission_number="ADM-OTHER",
+            patient=other_patient,
+            bed=other_bed,
+            admitting_doctor=other_profile,
+            admitted_by=self.reception_profile,
+            admission_reason="Scoped admission",
+        )
+
+        self.client.force_login(self.doc_user)
+        listing = self.client.get("/ipd/admissions/", HTTP_HOST="staff.hms.test")
+        self.assertEqual(listing.status_code, 200)
+        self.assertContains(listing, self.admission.admission_number)
+        self.assertNotContains(listing, other_admission.admission_number)
+        self.assertEqual(
+            self.client.get(
+                f"/ipd/admissions/{other_admission.pk}/",
+                HTTP_HOST="staff.hms.test",
+            ).status_code,
+            404,
+        )
+        discharge = self.client.post(
+            f"/ipd/admissions/{other_admission.pk}/discharge/",
+            {
+                "status": Admission.Status.DISCHARGED,
+                "discharge_condition": "Stable",
+                "discharge_summary": "Must not be accepted.",
+            },
+            HTTP_HOST="staff.hms.test",
+        )
+        self.assertEqual(discharge.status_code, 404)
+        other_admission.refresh_from_db()
+        self.assertEqual(other_admission.status, Admission.Status.ADMITTED)
+
     def test_admission_creation_locks_bed_and_snapshots_daily_rate(self):
         self.client.force_login(self.reception_user)
         response = self.client.post(

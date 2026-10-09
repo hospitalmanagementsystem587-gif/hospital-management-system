@@ -217,7 +217,7 @@ def _patient_read_queryset(user):
     patients = get_authorized_patient_queryset(user)
     if user.is_superuser or (
         StaffProfile.objects.filter(user=user).exists()
-        and user.groups.filter(name__in=("Reception", "Doctor", "Administrator")).exists()
+        and user.groups.filter(name__in=("Reception", "Doctor")).exists()
     ):
         return patients
     raise PermissionDenied
@@ -673,7 +673,7 @@ def patient_list(request):
         {
             "patients": patients.order_by("full_name", "mrn"),
             "query": query,
-            "can_register": _has_role(request.user, "Reception") or _has_role(request.user, "Administrator"),
+            "can_register": _has_role(request.user, "Reception"),
         },
     )
 
@@ -681,7 +681,7 @@ def patient_list(request):
 @permission_required("core.add_patient", raise_exception=True)
 def patient_create(request):
     if (
-        not (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
+        not _has_role(request.user, "Reception")
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
@@ -720,7 +720,7 @@ def patient_create(request):
 @permission_required("core.view_patient", raise_exception=True)
 def patient_detail(request, pk):
     patient = get_object_or_404(_patient_read_queryset(request.user), pk=pk)
-    can_bill = _has_role(request.user, "Reception") or _has_role(request.user, "Administrator")
+    can_bill = _has_role(request.user, "Reception")
     can_upload_docs = (
         _has_role(request.user, "Reception")
         or _has_role(request.user, "Administrator")
@@ -731,7 +731,7 @@ def patient_detail(request, pk):
         "core/patients/detail.html",
         {
             "patient": patient,
-            "can_edit": _has_role(request.user, "Reception") or _has_role(request.user, "Administrator"),
+            "can_edit": _has_role(request.user, "Reception"),
             "can_view_clinical": _has_role(request.user, "Doctor"),
             "can_bill": can_bill,
             "can_upload_docs": can_upload_docs,
@@ -751,7 +751,7 @@ def patient_detail(request, pk):
 @permission_required("core.change_patient", raise_exception=True)
 def patient_update(request, pk):
     if (
-        not (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
+        not _has_role(request.user, "Reception")
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
@@ -845,7 +845,7 @@ def _appointment_read_queryset(user):
     appointments = get_authorized_appointment_queryset(user)
     if user.is_superuser or (
         StaffProfile.objects.filter(user=user).exists()
-        and user.groups.filter(name__in=("Reception", "Doctor", "Administrator")).exists()
+        and user.groups.filter(name__in=("Reception", "Doctor")).exists()
     ):
         return appointments
     raise PermissionDenied
@@ -898,8 +898,7 @@ def appointment_list(request):
             "summary": summary,
             "is_reception": _has_role(request.user, "Reception"),
             "is_doctor": _has_role(request.user, "Doctor"),
-            "is_admin": _has_role(request.user, "Administrator"),
-            "can_manage_appointments": _has_role(request.user, "Reception") or _has_role(request.user, "Administrator"),
+            "can_manage_appointments": _has_role(request.user, "Reception"),
         },
     )
 
@@ -907,7 +906,7 @@ def appointment_list(request):
 @permission_required("core.add_appointment", raise_exception=True)
 def appointment_create(request):
     if (
-        not (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
+        not _has_role(request.user, "Reception")
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
@@ -951,7 +950,7 @@ def appointment_create(request):
 @permission_required("core.change_appointment", raise_exception=True)
 def appointment_reschedule(request, pk):
     if (
-        not (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
+        not _has_role(request.user, "Reception")
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
@@ -1017,7 +1016,7 @@ def appointment_transition(request, pk):
     }
     transitions = (
         reception_transitions
-        if (_has_role(request.user, "Reception") or _has_role(request.user, "Administrator"))
+        if _has_role(request.user, "Reception")
         else doctor_transitions
         if _has_role(request.user, "Doctor")
         else {}
@@ -1201,8 +1200,6 @@ def prescription_print(request, pk):
         prescriptions = Prescription.objects.filter(doctor=profile)
     elif _has_role(request.user, "Pharmacy"):
         prescriptions = Prescription.objects.filter(status=Prescription.Status.ISSUED)
-    elif _has_role(request.user, "Administrator"):
-        prescriptions = Prescription.objects.all()
     else:
         raise PermissionDenied
     prescription = get_object_or_404(
@@ -1644,6 +1641,10 @@ def dispense_prescription(request, prescription_id):
             ),
             pk=request.POST.get("prescription_item"),
         )
+        if not item.medicine.is_active:
+            return HttpResponseBadRequest(
+                "Inactive medicines cannot be newly dispensed."
+            )
         if StockMovement.objects.filter(request_key=request_key).exists():
             return redirect("pharmacy_prescription_list")
         batch = get_object_or_404(
@@ -1823,6 +1824,10 @@ def admission_list(request):
         .prefetch_related("deposits")
         .order_by("-admitted_at")
     )
+    if _has_role(request.user, "Doctor") and not (
+        request.user.is_superuser or _has_role(request.user, "Administrator")
+    ):
+        admissions = admissions.filter(admitting_doctor__user=request.user)
     query = request.GET.get("q", "").strip()
     status_filter = request.GET.get("status", "").strip()
 
@@ -1921,10 +1926,15 @@ def admission_detail(request, pk):
     ):
         raise PermissionDenied
 
+    admissions = Admission.objects.select_related(
+        "patient", "bed__ward", "admitting_doctor__user", "admitted_by__user"
+    ).prefetch_related("deposits__payment_method", "deposits__received_by__user")
+    if _has_role(request.user, "Doctor") and not (
+        request.user.is_superuser or _has_role(request.user, "Administrator")
+    ):
+        admissions = admissions.filter(admitting_doctor__user=request.user)
     admission = get_object_or_404(
-        Admission.objects.select_related(
-            "patient", "bed__ward", "admitting_doctor__user", "admitted_by__user"
-        ).prefetch_related("deposits__payment_method", "deposits__received_by__user"),
+        admissions,
         pk=pk,
     )
     can_manage_finance = _has_role(request.user, "Reception") or _has_role(
@@ -2007,9 +2017,12 @@ def admission_discharge(request, pk):
     ):
         raise PermissionDenied
 
-    admission = get_object_or_404(
-        Admission.objects.filter(status=Admission.Status.ADMITTED), pk=pk
-    )
+    admissions = Admission.objects.filter(status=Admission.Status.ADMITTED)
+    if _has_role(request.user, "Doctor") and not (
+        request.user.is_superuser or _has_role(request.user, "Administrator")
+    ):
+        admissions = admissions.filter(admitting_doctor__user=request.user)
+    admission = get_object_or_404(admissions, pk=pk)
 
     if request.method == "POST":
         form = DischargeForm(request.POST, instance=admission)
@@ -2053,6 +2066,10 @@ def pharmacy_dashboard(request):
         raise PermissionDenied("You do not have access to the pharmacy dashboard.")
 
     today = timezone.localdate()
+    today_sales = PharmacySale.objects.filter(
+        status=PharmacySale.Status.ISSUED,
+        sold_at__date=today,
+    )
     context = {
         "issued_prescriptions_count": Prescription.objects.filter(
             status=Prescription.Status.ISSUED
@@ -2066,6 +2083,11 @@ def pharmacy_dashboard(request):
         "active_medicines_count": Medicine.objects.filter(
             is_active=True
         ).count(),
+        "today_sales_count": today_sales.count(),
+        "today_sales_total": today_sales.aggregate(total=Sum("invoice__total"))[
+            "total"
+        ]
+        or Decimal("0.00"),
     }
     return render(request, "core/store/dashboard.html", context)
 

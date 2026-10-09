@@ -8,9 +8,11 @@ from django.utils import timezone
 
 from core.models import (
     Consultation,
+    Invoice,
     Medicine,
     MedicineBatch,
     Patient,
+    PharmacySale,
     Prescription,
     PrescriptionItem,
     StaffProfile,
@@ -196,6 +198,31 @@ class PharmacyDashboardTests(TestCase):
         self.assertEqual(response.context["expired_batches_count"], 1)
         self.assertEqual(response.context["active_medicines_count"], 2)
 
+    def test_dashboard_includes_todays_sales_summary(self):
+        invoice = Invoice.objects.create(
+            number="INV-PHARM-DASH",
+            status=Invoice.Status.ISSUED,
+            subtotal=Decimal("125.50"),
+            tax_total=Decimal("0.00"),
+            total=Decimal("125.50"),
+            issued_at=timezone.now(),
+            created_by=self.pharmacy_profile,
+        )
+        PharmacySale.objects.create(
+            number="SALE-PHARM-DASH",
+            invoice=invoice,
+            status=PharmacySale.Status.ISSUED,
+            sold_at=timezone.now(),
+            sold_by=self.pharmacy_profile,
+        )
+
+        self.client.force_login(self.pharmacy_user)
+        response = self.client.get("/", HTTP_HOST="store.hms.test")
+        self.assertEqual(response.context["today_sales_count"], 1)
+        self.assertEqual(response.context["today_sales_total"], Decimal("125.50"))
+        self.assertContains(response, "Today's Sales")
+        self.assertContains(response, "₹125.50")
+
     def test_patient_pii_minimization_on_dashboard(self):
         patient = Patient.objects.create(
             mrn="PAT-PII-99",
@@ -234,4 +261,6 @@ class PharmacyDashboardTests(TestCase):
         self.assertEqual(response.context["low_stock_batches_count"], 0)
         self.assertEqual(response.context["expired_batches_count"], 0)
         self.assertEqual(response.context["active_medicines_count"], 0)
+        self.assertEqual(response.context["today_sales_count"], 0)
+        self.assertEqual(response.context["today_sales_total"], Decimal("0.00"))
         self.assertContains(response, "0")

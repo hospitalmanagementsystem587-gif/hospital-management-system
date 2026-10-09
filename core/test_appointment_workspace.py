@@ -127,18 +127,24 @@ class AppointmentWorkspaceTests(TestCase):
         self.assertContains(response, "Alice Patient")
         self.assertNotContains(response, "Bob Patient")
 
-    def test_reception_and_admin_see_all_appointments(self):
+    def test_reception_sees_all_appointments_and_admin_is_denied(self):
         day_str = timezone.localtime(self.now).strftime("%Y-%m-%d")
-        for user in (self.reception_user, self.admin_user):
-            with self.subTest(user=user.username):
-                self.client.force_login(user)
-                response = self.client.get(
-                    f"/appointments/?date={day_str}",
-                    HTTP_HOST="staff.hms.test",
-                )
-                self.assertEqual(response.status_code, 200)
-                self.assertContains(response, "Alice Patient")
-                self.assertContains(response, "Bob Patient")
+        self.client.force_login(self.reception_user)
+        response = self.client.get(
+            f"/appointments/?date={day_str}",
+            HTTP_HOST="staff.hms.test",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Alice Patient")
+        self.assertContains(response, "Bob Patient")
+
+        self.client.force_login(self.admin_user)
+        self.assertEqual(
+            self.client.get(
+                f"/appointments/?date={day_str}", HTTP_HOST="staff.hms.test"
+            ).status_code,
+            403,
+        )
 
     def test_reception_books_appointment_with_validation_and_audit(self):
         self.client.force_login(self.reception_user)

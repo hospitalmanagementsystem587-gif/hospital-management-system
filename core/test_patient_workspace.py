@@ -120,15 +120,19 @@ class PatientWorkspaceTests(TestCase):
         response_detail = self.client.get(f"/patients/{self.patient1.pk}/", HTTP_HOST="staff.hms.test")
         self.assertEqual(response_detail.status_code, 403)
 
-    def test_reception_and_admin_see_all_non_archived_patients(self):
-        for user in (self.reception_user, self.admin_user):
-            with self.subTest(user=user.username):
-                self.client.force_login(user)
-                response = self.client.get("/patients/", HTTP_HOST="staff.hms.test")
-                self.assertEqual(response.status_code, 200)
-                self.assertContains(response, "Alice Assigned")
-                self.assertContains(response, "Bob Other")
-                self.assertNotContains(response, "Charlie Archived")
+    def test_reception_sees_all_non_archived_patients_and_admin_is_denied(self):
+        self.client.force_login(self.reception_user)
+        response = self.client.get("/patients/", HTTP_HOST="staff.hms.test")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Alice Assigned")
+        self.assertContains(response, "Bob Other")
+        self.assertNotContains(response, "Charlie Archived")
+
+        self.client.force_login(self.admin_user)
+        self.assertEqual(
+            self.client.get("/patients/", HTTP_HOST="staff.hms.test").status_code,
+            403,
+        )
 
     def test_doctor_sees_only_assigned_or_clinical_patients(self):
         self.client.force_login(self.doctor1_user)
@@ -176,31 +180,31 @@ class PatientWorkspaceTests(TestCase):
         response = self.client.get(f"/patients/{self.archived_patient.pk}/", HTTP_HOST="staff.hms.test")
         self.assertEqual(response.status_code, 404)
 
-    def test_patient_registration_by_reception_and_admin(self):
-        for user, name, phone in [
-            (self.reception_user, "Dave New", "9123456780"),
-            (self.admin_user, "Eve AdminCreated", "9123456781"),
-        ]:
-            with self.subTest(user=user.username):
-                self.client.force_login(user)
-                response = self.client.post(
-                    "/patients/register/",
-                    {
-                        "full_name": name,
-                        "phone": phone,
-                        "age": 28,
-                    },
-                    HTTP_HOST="staff.hms.test",
-                )
-                self.assertEqual(response.status_code, 302)
-                created = Patient.objects.get(full_name=name)
-                self.assertTrue(created.mrn.startswith("PAT-"))
-                self.assertTrue(
-                    AuditEvent.objects.filter(
-                        action="patient.created",
-                        target_id=str(created.pk),
-                    ).exists()
-                )
+    def test_patient_registration_by_reception_only(self):
+        self.client.force_login(self.reception_user)
+        response = self.client.post(
+            "/patients/register/",
+            {"full_name": "Dave New", "phone": "9123456780", "age": 28},
+            HTTP_HOST="staff.hms.test",
+        )
+        self.assertEqual(response.status_code, 302)
+        created = Patient.objects.get(full_name="Dave New")
+        self.assertTrue(created.mrn.startswith("PAT-"))
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="patient.created", target_id=str(created.pk)
+            ).exists()
+        )
+
+        self.client.force_login(self.admin_user)
+        self.assertEqual(
+            self.client.post(
+                "/patients/register/",
+                {"full_name": "Denied Admin", "phone": "9123456781", "age": 28},
+                HTTP_HOST="staff.hms.test",
+            ).status_code,
+            403,
+        )
 
     def test_patient_demographics_update_and_audit(self):
         self.client.force_login(self.reception_user)

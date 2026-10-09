@@ -78,7 +78,7 @@ def get_authorized_patient_queryset(user):
         return Patient.objects.none()
 
     groups = set(user.groups.values_list("name", flat=True))
-    if "Reception" in groups or "Administrator" in groups:
+    if "Reception" in groups:
         return Patient.objects.filter(archived_at__isnull=True)
 
     if "Doctor" in groups:
@@ -100,7 +100,7 @@ def get_authorized_appointment_queryset(user):
         return Appointment.objects.none()
 
     groups = set(user.groups.values_list("name", flat=True))
-    if "Reception" in groups or "Administrator" in groups:
+    if "Reception" in groups:
         return Appointment.objects.all()
 
     if "Doctor" in groups:

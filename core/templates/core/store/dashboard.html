@@ -71,6 +71,14 @@
       <div class="kpi-metric">{{ active_medicines_count }}</div>
       <div class="kpi-footer-note"><span>Catalog items</span><span class="badge badge-success">Active</span></div>
     </div>
+
+    <div class="stitch-kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-title">Today's Sales</span>
+      </div>
+      <div class="kpi-metric">{{ today_sales_count }}</div>
+      <div class="kpi-footer-note"><span>Issued sales</span><span class="badge badge-success">₹{{ today_sales_total|floatformat:2 }}</span></div>
+    </div>
   </div>
 </section>
 

@@ -188,16 +188,18 @@ class ClinicalDocumentWorkspaceTests(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_reception_and_admin_can_download_clean_documents(self):
-        for user in (self.reception_user, self.admin_user):
-            with self.subTest(user=user.username):
-                self.client.force_login(user)
-                response = self.client.get(
-                    f"/patients/{self.patient_a.pk}/documents/{self.clean_doc.public_id}/download/",
-                    HTTP_HOST="staff.hms.test",
-                )
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.headers["Content-Type"], "application/pdf")
+    def test_reception_can_download_clean_documents_and_admin_is_denied(self):
+        url = f"/patients/{self.patient_a.pk}/documents/{self.clean_doc.public_id}/download/"
+        self.client.force_login(self.reception_user)
+        response = self.client.get(url, HTTP_HOST="staff.hms.test")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Content-Type"], "application/pdf")
+
+        self.client.force_login(self.admin_user)
+        self.assertEqual(
+            self.client.get(url, HTTP_HOST="staff.hms.test").status_code,
+            403,
+        )
 
     def test_reception_uploads_valid_document_with_audit(self):
         self.client.force_login(self.reception_user)

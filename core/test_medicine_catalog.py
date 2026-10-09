@@ -1,4 +1,5 @@
 from decimal import Decimal
+import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -305,3 +306,62 @@ class MedicineCatalogTests(TestCase):
         self.assertEqual(item.medicine, self.med_active)
         batch.refresh_from_db()
         self.assertEqual(batch.medicine, self.med_active)
+
+    def test_inactive_medicine_cannot_be_newly_dispensed(self):
+        patient = Patient.objects.create(mrn="PAT-INACTIVE-RX", full_name="Rx Patient")
+        consult = Consultation.objects.create(
+            doctor=self.doctor_profile,
+            patient=patient,
+            diagnosis="Historical prescription",
+        )
+        prescription = Prescription.objects.create(
+            consultation=consult,
+            patient=patient,
+            doctor=self.doctor_profile,
+            number="RX-INACTIVE-MED",
+            status=Prescription.Status.ISSUED,
+        )
+        item = PrescriptionItem.objects.create(
+            prescription=prescription,
+            medicine=self.med_inactive,
+            dosage="100mg",
+            frequency="OD",
+            duration="3 days",
+            quantity=Decimal("3.000"),
+        )
+        supplier = Supplier.objects.create(code="SUP-INACTIVE", name="Supplier")
+        receipt = StockReceipt.objects.create(
+            number="REC-INACTIVE",
+            supplier=supplier,
+            received_at=timezone.now(),
+        )
+        batch = MedicineBatch.objects.create(
+            medicine=self.med_inactive,
+            receipt=receipt,
+            batch_number="BAT-INACTIVE",
+            expiry_date=timezone.localdate() + timezone.timedelta(days=30),
+            purchase_price=Decimal("5.00"),
+            sale_price=Decimal("8.00"),
+            quantity_received=Decimal("10.000"),
+            quantity_on_hand=Decimal("10.000"),
+        )
+
+        self.client.force_login(self.pharmacy_user)
+        response = self.client.post(
+            f"/prescriptions/{prescription.pk}/dispense/",
+            {
+                "request_key": str(uuid.uuid4()),
+                "prescription_item": item.pk,
+                "batch": batch.pk,
+                "quantity": "1.000",
+            },
+            HTTP_HOST="store.hms.test",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(
+            response,
+            "Inactive medicines cannot be newly dispensed.",
+            status_code=400,
+        )
+        batch.refresh_from_db()
+        self.assertEqual(batch.quantity_on_hand, Decimal("10.000"))
