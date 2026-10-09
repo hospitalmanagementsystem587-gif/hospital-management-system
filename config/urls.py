@@ -132,6 +132,11 @@ urlpatterns = [
         name="pharmacy_prescription_list",
     ),
     path(
+        "store/dispensing/",
+        views.pharmacy_prescription_list,
+        name="store_dispensing_queue",
+    ),
+    path(
         "pharmacy/",
         views.pharmacy_dashboard,
         name="pharmacy_dashboard",

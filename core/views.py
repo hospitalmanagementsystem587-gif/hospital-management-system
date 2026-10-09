@@ -1743,6 +1743,20 @@ def dispense_prescription(request, prescription_id):
         before = batch.quantity_on_hand
         batch.quantity_on_hand = before - quantity
         batch.save(update_fields=("quantity_on_hand", "updated_at"))
+        AuditEvent.objects.create(
+            actor=actor,
+            action="stock.dispensed",
+            target_type="dispensing",
+            target_id=str(dispensing.pk),
+            details={
+                "prescription_id": str(prescription.pk),
+                "prescription_number": prescription.number,
+                "batch_id": str(batch.pk),
+                "batch_number": batch.batch_number,
+                "quantity": str(quantity),
+                "request_key": str(request_key),
+            },
+        )
         StockMovement.objects.create(
             batch=batch,
             kind=StockMovement.Kind.DISPENSE,
@@ -1755,7 +1769,8 @@ def dispense_prescription(request, prescription_id):
             actor=actor,
         )
     messages.success(request, f"Dispensed {quantity} from batch {batch.batch_number}.")
-    return redirect("pharmacy_prescription_list")
+    redirect_target = request.POST.get("next") or "pharmacy_prescription_list"
+    return redirect(redirect_target)
 
 
 @permission_required("core.view_prescription", raise_exception=True)
