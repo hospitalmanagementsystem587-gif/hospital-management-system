@@ -4,7 +4,7 @@ import uuid
 
 from django.contrib import messages
 from django.conf import settings
-from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
@@ -2038,3 +2038,29 @@ def admission_discharge(request, pk):
             messages.error(request, "Failed to process discharge. Please check all fields.")
 
     return redirect("admission_detail", pk=admission.pk)
+
+
+@login_required
+def pharmacy_dashboard(request):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have access to the pharmacy dashboard.")
+
+    today = timezone.localdate()
+    context = {
+        "issued_prescriptions_count": Prescription.objects.filter(
+            status=Prescription.Status.ISSUED
+        ).count(),
+        "low_stock_batches_count": MedicineBatch.objects.filter(
+            quantity_on_hand__lt=10, is_quarantined=False
+        ).count(),
+        "expired_batches_count": MedicineBatch.objects.filter(
+            expiry_date__lt=today
+        ).count(),
+        "active_medicines_count": Medicine.objects.filter(
+            is_active=True
+        ).count(),
+    }
+    return render(request, "core/store/dashboard.html", context)
