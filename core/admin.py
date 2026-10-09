@@ -53,6 +53,7 @@ from .models import (
     StaffProfile,
     Supplier,
     Ticket,
+    TicketAttachment,
     TicketMessage,
     VisitType,
 )
@@ -1007,6 +1008,12 @@ class TicketMessageInline(admin.TabularInline):
     readonly_fields = ("created_at",)
 
 
+class TicketAttachmentInline(admin.TabularInline):
+    model = TicketAttachment
+    extra = 0
+    readonly_fields = ("created_at", "size_bytes", "sha256")
+
+
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = (
@@ -1022,7 +1029,7 @@ class TicketAdmin(admin.ModelAdmin):
     list_filter = ("status", "priority", "category", "created_at")
     search_fields = ("number", "title", "description", "patient__full_name", "patient__mrn")
     readonly_fields = ("number", "created_at", "updated_at", "resolved_at", "closed_at")
-    inlines = [TicketMessageInline]
+    inlines = [TicketMessageInline, TicketAttachmentInline]
 
 
 @admin.register(TicketMessage)
@@ -1031,3 +1038,11 @@ class TicketMessageAdmin(admin.ModelAdmin):
     list_filter = ("is_internal", "created_at")
     search_fields = ("ticket__number", "body", "author__username")
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(TicketAttachment)
+class TicketAttachmentAdmin(admin.ModelAdmin):
+    list_display = ("file_name", "ticket", "uploaded_by", "scan_status", "size_bytes", "created_at")
+    list_filter = ("scan_status", "created_at")
+    search_fields = ("file_name", "ticket__number", "uploaded_by__username")
+    readonly_fields = ("created_at", "updated_at", "size_bytes", "sha256")

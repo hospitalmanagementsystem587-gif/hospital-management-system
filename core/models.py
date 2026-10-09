@@ -2006,3 +2006,61 @@ class TicketMessage(TimestampedModel):
     def __str__(self):
         msg_type = "Internal note" if self.is_internal else "Reply"
         return f"{self.ticket.number} - {msg_type} by {self.author.username}"
+
+
+class TicketAttachment(TimestampedModel):
+    class MalwareScanStatus(models.TextChoices):
+        PENDING = "pending", "Pending Scan"
+        CLEAN = "clean", "Validated Clean"
+        REJECTED = "rejected", "Rejected / Infected"
+
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    message = models.ForeignKey(
+        TicketMessage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attachments",
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="uploaded_ticket_attachments",
+    )
+    file = models.FileField(
+        upload_to="ticket_attachments/%Y/%m/",
+        storage=private_patient_document_storage,
+    )
+    file_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    sha256 = models.CharField(max_length=64, blank=True)
+    scan_status = models.CharField(
+        max_length=16,
+        choices=MalwareScanStatus.choices,
+        default=MalwareScanStatus.CLEAN,
+    )
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["ticket", "created_at"], name="ticket_att_ticket_created_idx"),
+            models.Index(fields=["scan_status"], name="ticket_att_scan_status_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(scan_status__in=["pending", "clean", "rejected"]),
+                name="ticket_attachment_scan_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=Q(size_bytes__gt=0),
+                name="ticket_attachment_size_positive",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.file_name} ({self.ticket.number}) - {self.get_scan_status_display()}"
