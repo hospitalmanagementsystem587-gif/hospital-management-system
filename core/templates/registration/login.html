@@ -1,29 +1,35 @@
 {% extends "registration/base.html" %}
 
-{% block title %}Staff sign in{% endblock %}
+{% block title %}{% if is_patient_portal %}Patient sign in{% else %}Staff sign in{% endif %}{% endblock %}
 
 {% block auth_layout %}
 <main class="login-shell">
-  <section class="login-brand-panel" aria-label="Vedant Hospital clinical portal">
+  <section class="login-brand-panel" aria-label="{% if is_patient_portal %}Vedant Hospital patient portal{% else %}Vedant Hospital clinical portal{% endif %}">
     <div class="login-brand-top">
       <a href="{% url 'home' %}" class="login-brand-lockup">
         <span class="login-logo-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
         </span>
-        <span><strong>Vedant Hospital</strong><small>Clinical Operations</small></span>
+        <span><strong>Vedant Hospital</strong><small>{% if is_patient_portal %}Patient Portal{% else %}Clinical Operations{% endif %}</small></span>
       </a>
       <span class="login-network-status"><i></i>System available</span>
     </div>
 
     <div class="login-brand-content">
-      <span class="login-eyebrow">Hospital Management System</span>
-      <h1>One workspace.<br>Every care team.</h1>
-      <p>Secure access for authorized hospital staff managing patient care and daily operations.</p>
+      <span class="login-eyebrow">{% if is_patient_portal %}Personal Health Record{% else %}Hospital Management System{% endif %}</span>
+      <h1>{% if is_patient_portal %}Your care.<br>Your records.{% else %}One workspace.<br>Every care team.{% endif %}</h1>
+      <p>{% if is_patient_portal %}Secure access to your appointments, digital prescriptions, lab reports, and billing receipts.{% else %}Secure access for authorized hospital staff managing patient care and daily operations.{% endif %}</p>
 
       <div class="login-workflow" aria-label="Connected hospital workflow">
-        <div><span>01</span><strong>Patient administration</strong><small>Registration and records</small></div>
-        <div><span>02</span><strong>Clinical coordination</strong><small>Appointments and consultations</small></div>
-        <div><span>03</span><strong>Revenue operations</strong><small>Pharmacy and billing</small></div>
+        {% if is_patient_portal %}
+          <div><span>01</span><strong>Appointments</strong><small>Schedule &amp; track doctor visits</small></div>
+          <div><span>02</span><strong>Prescriptions</strong><small>Active medications &amp; dosages</small></div>
+          <div><span>03</span><strong>Billing &amp; Receipts</strong><small>Transparent health records</small></div>
+        {% else %}
+          <div><span>01</span><strong>Patient administration</strong><small>Registration and records</small></div>
+          <div><span>02</span><strong>Clinical coordination</strong><small>Appointments and consultations</small></div>
+          <div><span>03</span><strong>Revenue operations</strong><small>Pharmacy and billing</small></div>
+        {% endif %}
       </div>
     </div>
 
@@ -48,7 +54,7 @@
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
         </span>
         <h2>Welcome back</h2>
-        <p>Sign in with your hospital-issued account.</p>
+        <p>{% if is_patient_portal %}Sign in with your verified patient account.{% else %}Sign in with your hospital-issued account.{% endif %}</p>
       </div>
 
       {% if form.non_field_errors %}

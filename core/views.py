@@ -109,6 +109,13 @@ class HospitalLoginView(LoginView):
         cache.delete(_login_throttle_key(self.request, username))
         return super().form_valid(form)
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        portal = getattr(self.request, "portal", None)
+        context["is_patient_portal"] = portal == "patient"
+        context["portal_name"] = portal or "staff"
+        return context
+
     def get_success_url(self):
         redirect_to = self.get_redirect_url()
         if redirect_to:
