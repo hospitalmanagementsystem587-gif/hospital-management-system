@@ -52,6 +52,7 @@ from .models import (
     Specialty,
     StaffProfile,
     Supplier,
+    Ticket,
     VisitType,
 )
 
@@ -997,3 +998,20 @@ class PriceAdmin(admin.ModelAdmin):
                     "approved_by": str(obj.approved_by) if obj.approved_by else None,
                 },
             )
+
+
+@admin.register(Ticket)
+class TicketAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "category",
+        "priority",
+        "status",
+        "created_by",
+        "patient",
+        "created_at",
+    )
+    list_filter = ("status", "priority", "category", "created_at")
+    search_fields = ("number", "title", "description", "patient__full_name", "patient__mrn")
+    readonly_fields = ("number", "created_at", "updated_at", "resolved_at", "closed_at")

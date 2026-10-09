@@ -1844,3 +1844,136 @@ class Price(TimestampedModel):
         if price_type:
             qs = qs.filter(price_type=price_type)
         return qs.order_by("-effective_from", "-version", "-id").first()
+
+
+class Ticket(TimestampedModel):
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        IN_PROGRESS = "in_progress", "In Progress"
+        WAITING_ON_REQUESTER = "waiting_on_requester", "Waiting on Requester"
+        RESOLVED = "resolved", "Resolved"
+        CLOSED = "closed", "Closed"
+
+    class Priority(models.TextChoices):
+        LOW = "low", "Low"
+        NORMAL = "normal", "Normal"
+        HIGH = "high", "High"
+        URGENT = "urgent", "Urgent"
+
+    class Category(models.TextChoices):
+        GENERAL = "general", "General Inquiry"
+        BILLING = "billing", "Billing & Payments"
+        CLINICAL = "clinical", "Clinical & Medical"
+        PHARMACY = "pharmacy", "Pharmacy & Medication"
+        TECHNICAL = "technical", "Technical Support"
+
+    number = models.CharField(max_length=40, unique=True, editable=False)
+    title = models.CharField(max_length=200)
+    description = models.TextField(max_length=5000)
+    category = models.CharField(
+        max_length=32,
+        choices=Category.choices,
+        default=Category.GENERAL,
+    )
+    priority = models.CharField(
+        max_length=16,
+        choices=Priority.choices,
+        default=Priority.NORMAL,
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.OPEN,
+    )
+
+    # Requester attribution
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_tickets",
+    )
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="tickets",
+    )
+
+    # Lifecycle timestamps
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["status", "priority"], name="ticket_status_prio_idx"),
+            models.Index(fields=["patient", "status"], name="ticket_patient_status_idx"),
+            models.Index(fields=["category", "status"], name="ticket_category_status_idx"),
+            models.Index(fields=["created_at"], name="ticket_created_at_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(status__in=[
+                    "open",
+                    "in_progress",
+                    "waiting_on_requester",
+                    "resolved",
+                    "closed",
+                ]),
+                name="ticket_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=Q(priority__in=["low", "normal", "high", "urgent"]),
+                name="ticket_priority_valid",
+            ),
+            models.CheckConstraint(
+                condition=Q(category__in=[
+                    "general",
+                    "billing",
+                    "clinical",
+                    "pharmacy",
+                    "technical",
+                ]),
+                name="ticket_category_valid",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(status__in=["resolved", "closed"])
+                    | Q(resolved_at__isnull=True)
+                ),
+                name="ticket_resolved_at_only_when_resolved",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(status="closed")
+                    | Q(closed_at__isnull=True)
+                ),
+                name="ticket_closed_at_only_when_closed",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.number}: {self.title} ({self.get_status_display()})"
+
+    def save(self, *args, **kwargs):
+        if not self.number:
+            from core.services.numbering import next_number
+            seq, _ = NumberSequence.objects.get_or_create(
+                code="TICKET",
+                defaults={"prefix": "TCK-", "next_value": 1000},
+            )
+            self.number = next_number("TICKET")
+
+        now = timezone.now()
+        if self.status in [self.Status.RESOLVED, self.Status.CLOSED] and not self.resolved_at:
+            self.resolved_at = now
+        elif self.status not in [self.Status.RESOLVED, self.Status.CLOSED]:
+            self.resolved_at = None
+
+        if self.status == self.Status.CLOSED and not self.closed_at:
+            self.closed_at = now
+        elif self.status != self.Status.CLOSED:
+            self.closed_at = None
+
+        super().save(*args, **kwargs)
