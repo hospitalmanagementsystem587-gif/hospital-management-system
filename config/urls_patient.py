@@ -44,5 +44,15 @@ urlpatterns = [
         views.patient_doctor_directory,
         name="patient_doctor_directory",
     ),
+    path(
+        "invoices/",
+        views.patient_invoice_list,
+        name="patient_invoice_list",
+    ),
+    path(
+        "invoices/<int:pk>/",
+        views.patient_invoice_detail,
+        name="patient_invoice_detail",
+    ),
     path("", include("config.portal_urls")),
 ]

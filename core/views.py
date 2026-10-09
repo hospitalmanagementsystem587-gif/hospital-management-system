@@ -3082,3 +3082,91 @@ def patient_document_list(request):
             "query": query,
         },
     )
+
+
+def patient_invoice_list(request):
+    patient = _get_verified_patient_for_request(request)
+
+    invoices = (
+        Invoice.objects.filter(
+            patient=patient,
+            status__in=[Invoice.Status.ISSUED, Invoice.Status.VOIDED],
+        )
+        .prefetch_related("lines", "payments", "adjustments")
+        .order_by("-issued_at", "-created_at")
+    )
+
+    status_filter = request.GET.get("status", "").strip()
+    if status_filter:
+        invoices = invoices.filter(status=status_filter)
+
+    query = request.GET.get("q", "").strip()
+    if query:
+        invoices = invoices.filter(number__icontains=query)
+
+    invoice_data = []
+    for inv in invoices:
+        outstanding = _invoice_outstanding(inv)
+        invoice_data.append({
+            "invoice": inv,
+            "outstanding": outstanding,
+            "is_settled": outstanding <= 0,
+        })
+
+    _audit_clinical_access(
+        request,
+        "clinical.invoices_list_viewed",
+        "patient",
+        patient.pk,
+    )
+
+    return render(
+        request,
+        "core/patient/invoice_list.html",
+        {
+            "patient": patient,
+            "invoice_data": invoice_data,
+            "selected_status": status_filter,
+            "query": query,
+        },
+    )
+
+
+def patient_invoice_detail(request, pk):
+    patient = _get_verified_patient_for_request(request)
+
+    invoice = get_object_or_404(
+        Invoice.objects.filter(
+            patient=patient,
+            status__in=[Invoice.Status.ISSUED, Invoice.Status.VOIDED],
+        ).prefetch_related(
+            "lines",
+            "payments__method",
+            "payments__refunds",
+            "adjustments",
+        ),
+        pk=pk,
+    )
+
+    outstanding = _invoice_outstanding(invoice)
+
+    _audit_clinical_access(
+        request,
+        "clinical.invoice_detail_viewed",
+        "invoice",
+        invoice.pk,
+    )
+
+    return render(
+        request,
+        "core/patient/invoice_detail.html",
+        {
+            "patient": patient,
+            "invoice": invoice,
+            "outstanding": outstanding,
+            "is_settled": outstanding <= 0,
+            "lines": invoice.lines.all(),
+            "payments": invoice.payments.all(),
+            "adjustments": invoice.adjustments.all(),
+        },
+    )

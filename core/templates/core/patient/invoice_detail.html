@@ -1,0 +1,186 @@
+{% extends "core/base.html" %}
+
+{% block title %}Invoice {{ invoice.number }} | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="patient-workspace" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <a href="{% url 'patient_invoice_list' %}" style="display: inline-flex; align-items: center; gap: 0.5rem; color: #0284c7; text-decoration: none; font-weight: 500; font-size: 0.875rem; margin-bottom: 0.75rem;">
+        &larr; Back to Invoices
+      </a>
+      <h1 style="font-size: 1.875rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem 0;">Invoice {{ invoice.number }}</h1>
+      <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+        Issued on <strong>{{ invoice.issued_at|date:"d M Y, H:i"|default:invoice.created_at|date:"d M Y, H:i" }}</strong>
+      </p>
+    </div>
+    <div>
+      {% if invoice.status == 'voided' %}
+        <span class="badge badge-danger" style="font-size: 0.95rem; padding: 0.4rem 0.85rem;">Voided</span>
+      {% elif is_settled %}
+        <span class="badge badge-success" style="font-size: 0.95rem; padding: 0.4rem 0.85rem;">Fully Settled</span>
+      {% else %}
+        <span class="badge badge-warning" style="font-size: 0.95rem; padding: 0.4rem 0.85rem;">Awaiting Settlement</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 2rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03); margin-bottom: 2rem;">
+    <!-- Metadata Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1.5rem;">
+      <div>
+        <small style="color: #64748b; text-transform: uppercase; font-size: 0.75rem; font-weight: 600;">Invoice No.</small>
+        <div style="font-size: 1.15rem; font-weight: 800; color: #0284c7; margin-top: 0.25rem;">{{ invoice.number }}</div>
+      </div>
+      <div>
+        <small style="color: #64748b; text-transform: uppercase; font-size: 0.75rem; font-weight: 600;">Patient MRN</small>
+        <div style="font-size: 1rem; font-weight: 700; color: #1e293b; margin-top: 0.25rem;">{{ patient.mrn }}</div>
+      </div>
+      <div>
+        <small style="color: #64748b; text-transform: uppercase; font-size: 0.75rem; font-weight: 600;">Total Billed</small>
+        <div style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin-top: 0.25rem;">₹{{ invoice.total }}</div>
+      </div>
+      <div>
+        <small style="color: #64748b; text-transform: uppercase; font-size: 0.75rem; font-weight: 600;">Outstanding Balance</small>
+        <div style="font-size: 1.15rem; font-weight: 800; margin-top: 0.25rem;">
+          {% if outstanding > 0 %}
+            <span style="color: #ef4444;">₹{{ outstanding }}</span>
+          {% else %}
+            <span style="color: #10b981;">₹0.00</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Line Items Table -->
+    <h3 style="font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 1rem 0;">
+      Itemized Charges
+    </h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th style="text-align: center;">Qty</th>
+          <th style="text-align: right;">Unit Price</th>
+          <th style="text-align: right;">Discount</th>
+          <th style="text-align: right;">Line Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+          <tr>
+            <td>
+              <strong style="color: #0f172a;">{{ line.description }}</strong>
+            </td>
+            <td style="text-align: center;">{{ line.quantity }}</td>
+            <td style="text-align: right;">₹{{ line.unit_price }}</td>
+            <td style="text-align: right;">₹{{ line.discount_amount }}</td>
+            <td style="text-align: right;">
+              <strong style="color: #0f172a;">₹{{ line.line_total }}</strong>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" style="text-align: center; color: #64748b; padding: 1.5rem;">
+              No individual line items recorded.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Totals Summary -->
+    <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+      <div style="min-width: 260px; border-top: 1px solid #e2e8f0; padding-top: 1rem;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.875rem; color: #64748b;">
+          <span>Subtotal:</span>
+          <span style="font-weight: 600; color: #1e293b;">₹{{ invoice.subtotal }}</span>
+        </div>
+        {% if invoice.discount_total > 0 %}
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.875rem; color: #0284c7;">
+            <span>Discount:</span>
+            <span style="font-weight: 600;">-₹{{ invoice.discount_total }}</span>
+          </div>
+        {% endif %}
+        {% if invoice.tax_total > 0 %}
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.875rem; color: #64748b;">
+            <span>Tax / GST:</span>
+            <span style="font-weight: 600; color: #1e293b;">+₹{{ invoice.tax_total }}</span>
+          </div>
+        {% endif %}
+        <div style="display: flex; justify-content: space-between; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 2px solid #e2e8f0; font-size: 1.1rem; font-weight: 800; color: #0f172a;">
+          <span>Total:</span>
+          <span>₹{{ invoice.total }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payments & Adjustments Ledger -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+    <!-- Payments Received -->
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0;">
+          Payment Receipts
+        </h3>
+        <span class="badge badge-success">{{ payments|length }} Recorded</span>
+      </div>
+      <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for pmt in payments %}
+          <li style="padding: 0.85rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong style="color: #0f172a;">{{ pmt.receipt_number }}</strong>
+                <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.15rem;">
+                  Method: {{ pmt.method.name|default:"Payment" }} &bull; {{ pmt.paid_at|date:"d M Y, H:i"|default:pmt.created_at|date:"d M Y, H:i" }}
+                </div>
+              </div>
+              <strong style="color: #10b981; font-size: 1rem;">₹{{ pmt.amount }}</strong>
+            </div>
+            {% for ref in pmt.refunds.all %}
+              <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #cbd5e1; font-size: 0.8125rem; display: flex; justify-content: space-between; color: #dc2626;">
+                <span>Refund ({{ ref.get_status_display }}):</span>
+                <strong>-₹{{ ref.amount }}</strong>
+              </div>
+            {% endfor %}
+          </li>
+        {% empty %}
+          <li style="color: #64748b; font-size: 0.875rem; text-align: center; padding: 1.5rem;">
+            No payments recorded yet.
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <!-- Adjustments -->
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0;">
+          Billing Adjustments
+        </h3>
+        <span class="badge badge-info">{{ adjustments|length }} Recorded</span>
+      </div>
+      <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for adj in adjustments %}
+          <li style="padding: 0.85rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong style="color: #0f172a;">Adjustment</strong>
+                <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.15rem;">
+                  {{ adj.reason|default:"Manual adjustment" }}
+                </div>
+              </div>
+              <strong style="color: #0284c7; font-size: 1rem;">₹{{ adj.amount }}</strong>
+            </div>
+          </li>
+        {% empty %}
+          <li style="color: #64748b; font-size: 0.875rem; text-align: center; padding: 1.5rem;">
+            No adjustments recorded.
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
