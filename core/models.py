@@ -2129,6 +2129,10 @@ class Ticket(TimestampedModel):
             TicketMessage.objects.create(
                 ticket=locked, author=actor_user, body=note, is_internal=True
             )
+            TicketAuditEvent.objects.create(
+                ticket=locked, actor=actor_user, action="status_changed", field="status",
+                previous_value=previous, new_value=status, reason=reason.strip(), patient_visible=True,
+            )
             self.status = locked.status
             self.resolved_at = locked.resolved_at
             self.closed_at = locked.closed_at
@@ -2191,6 +2195,12 @@ class Ticket(TimestampedModel):
                     body=msg_body,
                     is_internal=True,
                 )
+                TicketAuditEvent.objects.create(
+                    ticket=locked, actor=actor_user, action="assignment_changed", field="assignment",
+                    previous_value={"staff_id": prev_assigned_to.pk if prev_assigned_to else None, "department_id": prev_team.pk if prev_team else None},
+                    new_value={"staff_id": staff_profile.pk if staff_profile else None, "department_id": team.pk if team else None},
+                    reason=reason.strip(), patient_visible=False,
+                )
 
             # Update in-memory state of self
             self.assigned_to = locked.assigned_to
@@ -2199,6 +2209,32 @@ class Ticket(TimestampedModel):
             self.sla_policy = locked.sla_policy
             self.sla_due_at = locked.sla_due_at
             self.sla_breached_at = locked.sla_breached_at
+            return locked
+
+    def change_priority(self, priority, *, actor, reason=""):
+        from django.core.exceptions import PermissionDenied, ValidationError
+        from django.db import transaction
+
+        actor_user = getattr(actor, "user", actor)
+        if not getattr(actor_user, "is_active", False) or not actor_user.has_perm("core.change_ticket"):
+            raise PermissionDenied("This user cannot change ticket priority.")
+        if priority not in self.Priority.values:
+            raise ValidationError({"priority": "Unknown ticket priority."})
+        with transaction.atomic():
+            locked = Ticket.objects.select_for_update().get(pk=self.pk)
+            previous = locked.priority
+            if previous == priority:
+                return locked
+            locked.priority = priority
+            locked.recalculate_sla(actor=actor_user, reason=reason or "Priority changed")
+            locked.save(update_fields=["priority", "sla_policy", "sla_due_at", "sla_breached_at", "updated_at"])
+            TicketAuditEvent.objects.create(
+                ticket=locked, actor=actor_user, action="priority_changed", field="priority",
+                previous_value=previous, new_value=priority, reason=reason.strip(), patient_visible=True,
+            )
+            self.priority = priority
+            self.sla_policy = locked.sla_policy
+            self.sla_due_at = locked.sla_due_at
             return locked
 
     def save(self, *args, **kwargs):
@@ -2344,6 +2380,40 @@ class SLALog(TimestampedModel):
     def __str__(self):
         return f"{self.ticket.number} - {self.get_event_display()} at {self.created_at}"
 
+
+
+class TicketAuditEvent(models.Model):
+    """Immutable, structured history for security-sensitive ticket changes."""
+
+    ticket = models.ForeignKey(Ticket, on_delete=models.PROTECT, related_name="audit_history")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="ticket_audit_events"
+    )
+    action = models.CharField(max_length=64)
+    field = models.CharField(max_length=64, blank=True)
+    previous_value = models.JSONField(null=True, blank=True)
+    new_value = models.JSONField(null=True, blank=True)
+    reason = models.CharField(max_length=500, blank=True)
+    patient_visible = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["ticket", "created_at"], name="ticket_audit_created_idx"),
+            models.Index(fields=["ticket", "patient_visible"], name="ticket_audit_visible_idx"),
+        ]
+        permissions = [("view_internal_ticketaudit", "Can view internal ticket audit history")]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            from django.core.exceptions import ValidationError
+            raise ValidationError("Ticket audit history is immutable.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        raise ValidationError("Ticket audit history is immutable.")
 
 
 class TicketMessage(TimestampedModel):

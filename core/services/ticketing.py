@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from core.models import Invoice, PatientAccount, Payment, StaffProfile, Ticket, TicketAttachment, TicketMessage
+from core.models import Invoice, PatientAccount, Payment, StaffProfile, Ticket, TicketAttachment, TicketAuditEvent, TicketMessage
 from core.services.documents import inspect_patient_document_upload, open_validated_patient_document
 
 
@@ -66,6 +66,10 @@ def create_patient_ticket(*, patient, user, title, description, category, priori
             patient=patient,
             status=Ticket.Status.OPEN,
         )
+        TicketAuditEvent.objects.create(
+            ticket=ticket, actor=user, action="created", field="status",
+            previous_value=None, new_value=Ticket.Status.OPEN, patient_visible=True,
+        )
         if upload:
             create_ticket_attachment(
                 ticket=ticket,
@@ -123,6 +127,10 @@ def create_staff_ticket(*, user, title, description, category, priority=Ticket.P
             patient=patient,
             assigned_team=assigned_team,
             status=Ticket.Status.OPEN,
+        )
+        TicketAuditEvent.objects.create(
+            ticket=ticket, actor=user, action="created", field="status",
+            previous_value=None, new_value=Ticket.Status.OPEN, patient_visible=patient is not None,
         )
         if upload:
             create_ticket_attachment(
@@ -291,6 +299,17 @@ def messages_for_user(ticket, user):
     if _patient_owns_ticket(user, ticket):
         messages = messages.filter(is_internal=False)
     return messages
+
+
+def ticket_history_for_user(ticket, user):
+    if not can_access_ticket(user, ticket):
+        raise PermissionDenied("You cannot access this ticket history.")
+    history = ticket.audit_history.select_related("actor").all()
+    if _patient_owns_ticket(user, ticket):
+        return history.filter(patient_visible=True)
+    if not (user.is_superuser or user.has_perm("core.view_internal_ticketaudit")):
+        raise PermissionDenied("You cannot access internal ticket history.")
+    return history
 
 
 def add_ticket_message(*, ticket, author, body, is_internal=False):

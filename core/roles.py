@@ -212,6 +212,8 @@ ROLE_PERMISSIONS = {
         "core.add_ticketmessage",
         "core.view_ticketattachment",
         "core.add_ticketattachment",
+        "core.view_ticketauditevent",
+        "core.view_internal_ticketaudit",
     ),
     "Support Agent": (
         "core.view_department",
@@ -223,6 +225,8 @@ ROLE_PERMISSIONS = {
         "core.add_ticketmessage",
         "core.view_ticketattachment",
         "core.add_ticketattachment",
+        "core.view_ticketauditevent",
+        "core.view_internal_ticketaudit",
     ),
 }
 
