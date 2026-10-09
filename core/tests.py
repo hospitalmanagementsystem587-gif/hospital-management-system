@@ -314,7 +314,7 @@ class HospitalBootstrapTests(TestCase):
         self.assertEqual(HospitalSettings.objects.count(), 1)
         self.assertEqual(
             set(Group.objects.values_list("name", flat=True)),
-            {"Reception", "Pharmacy", "Doctor", "Administrator"},
+            {"Reception", "Pharmacy", "Doctor", "Administrator", "Support Agent"},
         )
         self.assertEqual(NumberSequence.objects.count(), 10)
 
@@ -2392,5 +2392,4 @@ class PatientDocumentUploadTests(TestCase):
         self.assertEqual(doc.title, "Outside Doctor Physical Prescription")
         self.assertEqual(doc.document_type, "prescription")
         self.assertContains(response, "uploaded successfully")
-
 
