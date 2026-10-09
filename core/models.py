@@ -1273,6 +1273,8 @@ class Adjustment(TimestampedModel):
 
 
 class AuditEvent(models.Model):
+    """Append-only audit record for security-sensitive HMS activity."""
+
     actor = models.ForeignKey(
         StaffProfile,
         on_delete=models.SET_NULL,
@@ -1285,6 +1287,21 @@ class AuditEvent(models.Model):
     target_id = models.CharField(max_length=80)
     details = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError("Audit events are immutable.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+
+        raise ValidationError("Audit events are immutable.")
 
 
 class PatientDocument(TimestampedModel):
