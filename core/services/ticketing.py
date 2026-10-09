@@ -10,14 +10,11 @@ from core.services.documents import inspect_patient_document_upload, open_valida
 
 
 def _patient_owns_ticket(user, ticket):
-    if ticket.created_by_id == user.pk:
-        return True
-    return bool(
-        ticket.patient_id
-        and PatientAccount.objects.filter(
-            user=user, patient_id=ticket.patient_id, is_verified=True
-        ).exists()
-    )
+    if not ticket.patient_id:
+        return False
+    return PatientAccount.objects.filter(
+        user=user, patient_id=ticket.patient_id, is_verified=True
+    ).exists()
 
 
 def _staff_profile(user):
@@ -69,6 +66,109 @@ def create_patient_ticket(*, patient, user, title, description, category, priori
         return ticket
 
 
+def create_staff_ticket(*, user, title, description, category, priority=Ticket.Priority.NORMAL, patient=None, assigned_team=None, upload=None):
+    """
+    Safely creates an operational/clinical support ticket from staff workflows.
+    Ensures requester is active staff, attaches staff profile department if unassigned,
+    and records optional patient context.
+    """
+    if not getattr(user, "is_authenticated", False) or not user.is_active:
+        raise PermissionDenied("Authentication required to create staff tickets.")
+    if not (user.is_superuser or user.has_perm("core.add_ticket")):
+        raise PermissionDenied("You do not have permission to create support tickets.")
+
+    profile = _staff_profile(user)
+    if not user.is_superuser and profile is None:
+        raise PermissionDenied("Only staff members can create staff tickets.")
+
+    allowed_categories = Ticket.Category.values
+    if category not in allowed_categories:
+        raise ValidationError({"category": "Invalid or disallowed ticket category."})
+
+    title = (title or "").strip()
+    if not title:
+        raise ValidationError({"title": "A ticket title is required."})
+
+    description = (description or "").strip()
+    if not description:
+        raise ValidationError({"description": "A ticket description is required."})
+
+    with transaction.atomic():
+        ticket = Ticket.objects.create(
+            title=title,
+            description=description,
+            category=category,
+            priority=priority,
+            created_by=user,
+            patient=patient,
+            assigned_team=assigned_team,
+            status=Ticket.Status.OPEN,
+        )
+        if upload:
+            create_ticket_attachment(
+                ticket=ticket,
+                uploaded_by=user,
+                upload=upload,
+                is_internal=True,
+            )
+        return ticket
+
+
+def staff_tickets_queryset(user, *, filter_type="all", query=None):
+    """
+    Returns tickets visible to a staff user based on role, department, assignment,
+    or requester relationship.
+    """
+    if not getattr(user, "is_authenticated", False) or not user.is_active:
+        return Ticket.objects.none()
+    if not (user.is_superuser or user.has_perm("core.view_ticket") or user.groups.filter(name="Administrator").exists()):
+        return Ticket.objects.none()
+
+    profile = _staff_profile(user)
+    if user.is_superuser or (profile is None and user.groups.filter(name="Administrator").exists()):
+        base_qs = Ticket.objects.all()
+    elif profile is not None:
+        dept = profile.department
+        # Staff can see: tickets they created, tickets assigned to them, tickets assigned to their department,
+        # or unassigned tickets (assigned_team=dept or unassigned department)
+        base_qs = Ticket.objects.filter(
+            Q(created_by=user)
+            | Q(assigned_to=profile)
+            | Q(assigned_team=dept)
+            | Q(assigned_team__isnull=True, assigned_to__isnull=True)
+        ).distinct()
+    else:
+        return Ticket.objects.none()
+
+    if filter_type == "created_by_me":
+        base_qs = base_qs.filter(created_by=user)
+    elif filter_type == "assigned_to_me":
+        if profile:
+            base_qs = base_qs.filter(assigned_to=profile)
+        else:
+            base_qs = Ticket.objects.none()
+    elif filter_type == "my_department":
+        if profile and profile.department:
+            base_qs = base_qs.filter(assigned_team=profile.department)
+        else:
+            base_qs = Ticket.objects.none()
+    elif filter_type == "open":
+        base_qs = base_qs.exclude(status__in=[Ticket.Status.RESOLVED, Ticket.Status.CLOSED])
+
+    if query:
+        query = query.strip()
+        base_qs = base_qs.filter(
+            Q(number__icontains=query)
+            | Q(title__icontains=query)
+            | Q(patient__full_name__icontains=query)
+            | Q(patient__mrn__icontains=query)
+        )
+
+    return base_qs.select_related(
+        "patient", "created_by", "assigned_to__user", "assigned_team", "sla_policy"
+    ).order_by("-created_at")
+
+
 def patient_tickets_queryset(patient, user):
     """
     Returns only tickets owned by the given verified patient and user.
@@ -93,11 +193,11 @@ def agent_tickets_queryset(user, *, queue_filter="all", query=None):
     """
     if not getattr(user, "is_authenticated", False) or not user.is_active:
         return Ticket.objects.none()
-    if not user.has_perm("core.view_ticket"):
+    if not (user.is_superuser or user.has_perm("core.view_ticket") or user.groups.filter(name="Administrator").exists()):
         return Ticket.objects.none()
 
     profile = _staff_profile(user)
-    if user.is_superuser:
+    if user.is_superuser or (profile is None and user.groups.filter(name="Administrator").exists()):
         base_qs = Ticket.objects.all()
     elif profile is not None:
         # Agent can see: tickets assigned to themselves, or tickets assigned to their department, or unassigned tickets in their department / general (null department)
@@ -149,9 +249,11 @@ def can_access_ticket(user, ticket, *, write=False):
     permission = "core.change_ticket" if write else "core.view_ticket"
     if not user.has_perm(permission):
         return False
-    profile = _staff_profile(user)
     if user.is_superuser:
         return True
+    if ticket.created_by_id == user.pk:
+        return True
+    profile = _staff_profile(user)
     if profile is None:
         return False
     if ticket.assigned_to_id:

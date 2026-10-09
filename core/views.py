@@ -7,7 +7,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
@@ -3407,7 +3407,7 @@ def patient_ticket_detail(request, pk):
     """View ticket details, visible messages, and post replies."""
     patient = _get_verified_patient_for_request(request)
     ticket = get_object_or_404(
-        Ticket.objects.filter(patient=patient, created_by=request.user),
+        Ticket.objects.filter(patient=patient),
         pk=pk,
     )
     from core.services.ticketing import (
@@ -3466,9 +3466,15 @@ def patient_ticket_detail(request, pk):
 # ==============================================================================
 
 
-@permission_required("core.view_ticket", raise_exception=True)
+@login_required
 def agent_ticket_queue(request):
     """Hospital agent workspace: browse and triage tickets across authorized queues."""
+    if not (
+        request.user.is_superuser
+        or request.user.has_perm("core.view_ticket")
+        or request.user.groups.filter(name__in=["Support Agent", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have access to the agent workspace.")
     from core.services.ticketing import agent_tickets_queryset
     queue_filter = request.GET.get("queue", "all").strip()
     query = request.GET.get("q", "").strip()
@@ -3596,5 +3602,178 @@ def agent_ticket_workspace(request, pk):
             "attachments_list": attachments_list,
             "sla_logs": sla_logs,
             "status_choices": Ticket.Status.choices,
+        },
+    )
+
+
+# ==============================================================================
+# STAFF TICKET WORKSPACE & INTEGRATION (KAN-93 / KAN-67)
+# ==============================================================================
+
+
+@login_required
+def staff_ticket_list(request):
+    """Staff workspace: browse operational and clinical support tickets."""
+    if not (
+        request.user.is_superuser
+        or request.user.has_perm("core.view_ticket")
+        or request.user.groups.filter(name__in=["Administrator", "Doctor", "Reception"]).exists()
+    ):
+        raise PermissionDenied("You do not have access to staff tickets.")
+
+    from core.services.ticketing import staff_tickets_queryset
+    filter_type = request.GET.get("filter", "all").strip()
+    query = request.GET.get("q", "").strip()
+
+    tickets = staff_tickets_queryset(
+        request.user,
+        filter_type=filter_type,
+        query=query,
+    )
+
+    counts = {
+        "all": staff_tickets_queryset(request.user, filter_type="all").count(),
+        "created_by_me": staff_tickets_queryset(request.user, filter_type="created_by_me").count(),
+        "assigned_to_me": staff_tickets_queryset(request.user, filter_type="assigned_to_me").count(),
+        "my_department": staff_tickets_queryset(request.user, filter_type="my_department").count(),
+        "open": staff_tickets_queryset(request.user, filter_type="open").count(),
+    }
+
+    return render(
+        request,
+        "core/staff/ticket_list.html",
+        {
+            "tickets": tickets,
+            "filter_type": filter_type,
+            "query": query,
+            "counts": counts,
+        },
+    )
+
+
+@login_required
+def staff_ticket_create(request):
+    """Create a new operational or clinical ticket from staff workflows."""
+    if not (
+        request.user.is_superuser
+        or request.user.has_perm("core.add_ticket")
+        or request.user.groups.filter(name__in=["Administrator", "Doctor", "Reception"]).exists()
+    ):
+        raise PermissionDenied("You do not have permission to create support tickets.")
+
+    from core.services.ticketing import create_staff_ticket
+
+    patient_id = request.GET.get("patient_id") or request.POST.get("patient_id") or request.POST.get("patient")
+    patient = None
+    if patient_id:
+        patient = Patient.objects.filter(pk=patient_id, archived_at__isnull=True).first()
+
+    departments = Department.objects.filter(is_active=True).order_by("name")
+
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        description = request.POST.get("description", "").strip()
+        category = request.POST.get("category", "").strip()
+        priority = request.POST.get("priority", Ticket.Priority.NORMAL).strip()
+        assigned_team_id = request.POST.get("assigned_team")
+        upload = request.FILES.get("attachment")
+
+        assigned_team = None
+        if assigned_team_id:
+            assigned_team = Department.objects.filter(pk=assigned_team_id, is_active=True).first()
+
+        try:
+            ticket = create_staff_ticket(
+                user=request.user,
+                title=title,
+                description=description,
+                category=category,
+                priority=priority if priority in Ticket.Priority.values else Ticket.Priority.NORMAL,
+                patient=patient,
+                assigned_team=assigned_team,
+                upload=upload,
+            )
+            messages.success(request, f"Ticket {ticket.number} created successfully.")
+            return redirect("staff_ticket_detail", pk=ticket.pk)
+        except ValidationError as e:
+            if hasattr(e, "message_dict"):
+                for field, errs in e.message_dict.items():
+                    messages.error(request, f"{field.capitalize()}: {' '.join(errs)}")
+            else:
+                messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, str(e))
+
+    return render(
+        request,
+        "core/staff/ticket_create.html",
+        {
+            "patient": patient,
+            "departments": departments,
+            "categories": Ticket.Category.choices,
+            "priorities": Ticket.Priority.choices,
+        },
+    )
+
+
+@login_required
+def staff_ticket_detail(request, pk):
+    """Staff workspace ticket details: view messages, attachments, and post replies."""
+    from core.services.ticketing import (
+        add_ticket_message,
+        can_access_ticket,
+        create_ticket_attachment,
+        messages_for_user,
+    )
+
+    ticket = get_object_or_404(
+        Ticket.objects.select_related("patient", "created_by", "assigned_to__user", "assigned_team", "sla_policy"),
+        pk=pk,
+    )
+    if not can_access_ticket(request.user, ticket):
+        raise PermissionDenied("You do not have access to this ticket.")
+
+    if request.method == "POST":
+        action = request.POST.get("action", "reply")
+        if action == "reply":
+            body = request.POST.get("body", "").strip()
+            is_internal = request.POST.get("is_internal") == "true"
+            upload = request.FILES.get("attachment")
+
+            if not body and not upload:
+                messages.error(request, "Please enter a message or attach a file.")
+            else:
+                try:
+                    msg = None
+                    if body:
+                        msg = add_ticket_message(
+                            ticket=ticket,
+                            author=request.user,
+                            body=body,
+                            is_internal=is_internal,
+                        )
+                    if upload:
+                        create_ticket_attachment(
+                            ticket=ticket,
+                            uploaded_by=request.user,
+                            upload=upload,
+                            message=msg,
+                            is_internal=is_internal,
+                        )
+                    messages.success(request, "Reply recorded successfully.")
+                    return redirect("staff_ticket_detail", pk=ticket.pk)
+                except Exception as e:
+                    messages.error(request, str(e))
+
+    messages_list = messages_for_user(ticket, request.user)
+    attachments_list = ticket.attachments.all()
+
+    return render(
+        request,
+        "core/staff/ticket_detail.html",
+        {
+            "ticket": ticket,
+            "messages_list": messages_list,
+            "attachments_list": attachments_list,
         },
     )

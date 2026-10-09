@@ -45,6 +45,9 @@ urlpatterns = [
     ),
     path("invoices/create/", views.invoice_create, name="invoice_create"),
     path("invoices/", views.invoice_list, name="invoice_list"),
+    path("staff/tickets/", views.staff_ticket_list, name="staff_ticket_list"),
+    path("staff/tickets/create/", views.staff_ticket_create, name="staff_ticket_create"),
+    path("staff/tickets/<int:pk>/", views.staff_ticket_detail, name="staff_ticket_detail"),
     path("invoices/<int:pk>/", views.invoice_detail, name="invoice_detail"),
     path("invoices/<int:pk>/payment/", views.payment_create, name="payment_create"),
     path(

@@ -44,6 +44,12 @@
         Update demographics
       </a>
     {% endif %}
+    {% if perms.core.add_ticket %}
+      <a href="{% url 'staff_ticket_create' %}?patient_id={{ patient.pk }}" class="btn-stitch-secondary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Raise Ticket
+      </a>
+    {% endif %}
     {% if can_view_clinical %}
       <a href="{% url 'clinical_history' patient.pk %}" class="btn-stitch-primary">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
