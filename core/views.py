@@ -2744,6 +2744,8 @@ def patient_portal_document_download(request, public_id):
         PatientDocument.objects.filter(
             patient=patient,
             validation_status=PatientDocument.ValidationStatus.CLEAN,
+            patient_released_at__isnull=False,
+            patient_access_revoked_at__isnull=True,
         ),
         public_id=public_id,
     )

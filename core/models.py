@@ -1847,6 +1847,13 @@ class Price(TimestampedModel):
 
 
 class Ticket(TimestampedModel):
+    ALLOWED_STATUS_TRANSITIONS = {
+        "open": {"in_progress", "waiting_on_requester", "resolved", "closed"},
+        "in_progress": {"waiting_on_requester", "resolved", "closed"},
+        "waiting_on_requester": {"in_progress", "resolved", "closed"},
+        "resolved": {"in_progress", "closed"},
+        "closed": {"in_progress"},
+    }
     class Status(models.TextChoices):
         OPEN = "open", "Open"
         IN_PROGRESS = "in_progress", "In Progress"
@@ -1975,11 +1982,57 @@ class Ticket(TimestampedModel):
     def __str__(self):
         return f"{self.number}: {self.title} ({self.get_status_display()})"
 
+    def transition_to(self, status, *, actor, reason=""):
+        from django.core.exceptions import PermissionDenied, ValidationError
+        from django.db import transaction
+
+        actor_user = getattr(actor, "user", actor)
+        if not getattr(actor_user, "is_active", False) or not actor_user.has_perm("core.change_ticket"):
+            raise PermissionDenied("This user cannot change hospital ticket status.")
+        if status not in self.Status.values:
+            raise ValidationError({"status": "Unknown ticket status."})
+
+        with transaction.atomic():
+            locked = Ticket.objects.select_for_update().get(pk=self.pk)
+            previous = locked.status
+            if status == previous:
+                return locked
+            if status not in self.ALLOWED_STATUS_TRANSITIONS.get(previous, set()):
+                raise ValidationError(
+                    {"status": f"Tickets cannot transition from {previous} to {status}."}
+                )
+            locked.status = status
+            locked.save(update_fields=["status", "resolved_at", "closed_at", "updated_at"])
+            note = f"Status changed from {previous} to {status}."
+            if reason:
+                note += f" Reason: {reason.strip()}"
+            TicketMessage.objects.create(
+                ticket=locked, author=actor_user, body=note, is_internal=True
+            )
+            self.status = locked.status
+            self.resolved_at = locked.resolved_at
+            self.closed_at = locked.closed_at
+            return locked
+
     def assign(self, staff_profile=None, team=None, actor=None, reason=""):
         """
         Thread-safe assignment engine operation using row-level locking.
         """
+        from django.core.exceptions import PermissionDenied, ValidationError
         from django.db import transaction
+
+        if actor is None:
+            raise ValidationError("An authenticated actor is required for assignment changes.")
+        actor_user = getattr(actor, "user", actor)
+        if not getattr(actor_user, "is_active", False) or not actor_user.has_perm("core.change_ticket"):
+            raise PermissionDenied("This user cannot assign hospital tickets.")
+        if staff_profile is not None:
+            if not staff_profile.user.is_active or not staff_profile.user.has_perm("core.change_ticket"):
+                raise ValidationError("The selected assignee is not an active eligible ticket agent.")
+            if team is not None and staff_profile.department_id != team.pk:
+                raise ValidationError("The selected assignee does not belong to the assigned department.")
+        if team is not None and not team.is_active:
+            raise ValidationError("Tickets cannot be assigned to an inactive department.")
         now = timezone.now()
         with transaction.atomic():
             locked = Ticket.objects.select_for_update().get(pk=self.pk)
@@ -1993,7 +2046,6 @@ class Ticket(TimestampedModel):
 
             # Create an internal ticket audit note if actor provided
             if actor:
-                actor_user = getattr(actor, "user", actor)
                 assignee_name = str(staff_profile) if staff_profile else "Unassigned"
                 team_name = team.name if team else "None"
                 msg_body = f"Assignment changed to {assignee_name} (Team: {team_name})."
@@ -2068,6 +2120,16 @@ class TicketMessage(TimestampedModel):
         msg_type = "Internal note" if self.is_internal else "Reply"
         return f"{self.ticket.number} - {msg_type} by {self.author.username}"
 
+    def save(self, *args, **kwargs):
+        if self.pk and TicketMessage.objects.filter(pk=self.pk).exists():
+            from django.core.exceptions import ValidationError
+            raise ValidationError("Ticket messages are append-only and cannot be edited.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        raise ValidationError("Ticket messages are append-only and cannot be deleted.")
+
 
 class TicketAttachment(TimestampedModel):
     class MalwareScanStatus(models.TextChoices):
@@ -2100,10 +2162,14 @@ class TicketAttachment(TimestampedModel):
     content_type = models.CharField(max_length=100)
     size_bytes = models.PositiveBigIntegerField(default=0)
     sha256 = models.CharField(max_length=64, blank=True)
+    is_internal = models.BooleanField(
+        default=False,
+        help_text="If true, only authorized hospital staff may access this attachment.",
+    )
     scan_status = models.CharField(
         max_length=16,
         choices=MalwareScanStatus.choices,
-        default=MalwareScanStatus.CLEAN,
+        default=MalwareScanStatus.PENDING,
     )
 
     class Meta:
@@ -2125,3 +2191,12 @@ class TicketAttachment(TimestampedModel):
 
     def __str__(self):
         return f"{self.file_name} ({self.ticket.number}) - {self.get_scan_status_display()}"
+
+    def clean(self):
+        super().clean()
+        if self.message_id and self.message.ticket_id != self.ticket_id:
+            from django.core.exceptions import ValidationError
+            raise ValidationError({"message": "The message must belong to the same ticket."})
+        if self.message_id and self.message.is_internal and not self.is_internal:
+            from django.core.exceptions import ValidationError
+            raise ValidationError({"is_internal": "Attachments on internal notes must be internal."})

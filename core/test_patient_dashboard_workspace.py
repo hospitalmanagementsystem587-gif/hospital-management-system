@@ -142,6 +142,7 @@ class PatientDashboardWorkspaceTests(TestCase):
             size_bytes=len(clean_content),
             sha256=hashlib.sha256(clean_content).hexdigest(),
             validation_status=PatientDocument.ValidationStatus.CLEAN,
+            patient_released_at=timezone.now(),
         )
         self.document.file.save("jane_report.pdf", ContentFile(clean_content), save=False)
         self.document.save()

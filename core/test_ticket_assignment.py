@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.utils import timezone
 
@@ -33,6 +34,14 @@ class TicketAssignmentEngineTests(TestCase):
             email="actor@example.com",
             password="testpassword123",
         )
+
+        assignment_permissions = Permission.objects.filter(
+            content_type__app_label="core",
+            codename__in=["view_ticket", "change_ticket"],
+        )
+        self.actor_user.user_permissions.add(*assignment_permissions)
+        self.staff_user1.user_permissions.add(*assignment_permissions)
+        self.staff_user2.user_permissions.add(*assignment_permissions)
 
         self.dept_billing = Department.objects.create(name="Billing Dept", code="BILLING_KAN89")
         self.dept_tech = Department.objects.create(name="IT Support", code="IT_KAN89")

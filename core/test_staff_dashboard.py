@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -114,7 +114,10 @@ class StaffDashboardTests(TestCase):
         patient2 = Patient.objects.create(mrn="PAT002", full_name="Patient Two")
         visit_type = VisitType.objects.create(name="Standard OPD", code="OPD-STD")
 
-        now = timezone.now()
+        now = timezone.make_aware(
+            datetime.combine(timezone.localdate(), time(hour=10)),
+            timezone.get_current_timezone(),
+        )
 
         # Doctor 1: 1 checked in, 1 scheduled today
         Appointment.objects.create(

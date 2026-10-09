@@ -246,6 +246,17 @@ class PatientDocumentsWorkspaceTests(TestCase):
         resp_pending = self.client.get(f"/documents/{self.alice_doc_pending.public_id}/download/")
         self.assertEqual(resp_pending.status_code, 404)
 
+    def test_cannot_download_unreleased_or_revoked_document(self):
+        self.client.force_login(self.alice_user)
+        unreleased = self.client.get(
+            f"/documents/{self.alice_doc_unreleased.public_id}/download/"
+        )
+        revoked = self.client.get(
+            f"/documents/{self.alice_doc_revoked.public_id}/download/"
+        )
+        self.assertEqual(unreleased.status_code, 404)
+        self.assertEqual(revoked.status_code, 404)
+
     def test_cross_patient_download_returns_404(self):
         # Alice cannot download Bob's document
         self.client.force_login(self.alice_user)

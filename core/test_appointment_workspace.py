@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -83,7 +83,11 @@ class AppointmentWorkspaceTests(TestCase):
         cls.patient2 = Patient.objects.create(mrn="MRN-002", full_name="Bob Patient")
         cls.visit_type = VisitType.objects.create(name="Standard Consultation", code="STD-OPD")
 
-        cls.now = timezone.now().replace(minute=0, second=0, microsecond=0)
+        local_today = timezone.localdate()
+        cls.now = timezone.make_aware(
+            datetime.combine(local_today, time(hour=10)),
+            timezone.get_current_timezone(),
+        )
 
         # Existing appointment for Doctor 1
         cls.appt_doc1 = Appointment.objects.create(

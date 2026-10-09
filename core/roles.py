@@ -184,6 +184,13 @@ ROLE_PERMISSIONS = {
         "core.change_admission",
         "core.view_inpatientdeposit",
         "core.add_inpatientdeposit",
+        "core.view_ticket",
+        "core.add_ticket",
+        "core.change_ticket",
+        "core.view_ticketmessage",
+        "core.add_ticketmessage",
+        "core.view_ticketattachment",
+        "core.add_ticketattachment",
     ),
 }
 
