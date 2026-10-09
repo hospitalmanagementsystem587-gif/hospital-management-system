@@ -1,0 +1,153 @@
+{% extends "core/base.html" %}
+
+{% block title %}Inventory & Batches | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="portal-badge" style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+      <span class="badge badge-info">Store portal</span>
+      <span class="badge badge-success">Inventory Management</span>
+    </div>
+    <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-secondary); margin: 0 0 0.25rem 0;">Inventory &amp; Batches</h1>
+    <p style="color: var(--color-text-muted); font-size: 0.9375rem; margin: 0;">Monitor FEFO batch stock levels, track quarantine state, and conduct governed adjustments.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <a href="{% url 'pharmacy_dashboard' %}" class="btn-stitch-secondary">
+      &larr; Store Dashboard
+    </a>
+    <a href="{% url 'pharmacy_prescription_list' %}" class="btn-stitch-primary">
+      Dispensing Queue
+    </a>
+  </div>
+</div>
+
+<!-- Search and Filter Form -->
+<section class="patient-search-card" aria-labelledby="batch-search-title" style="margin-bottom: 2rem;">
+  <form method="get" role="search" class="patient-search-form">
+    <div class="patient-search-input" style="flex: 1;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="batch-query" name="q" value="{{ query }}" type="search" placeholder="Search by batch #, medicine name, code, or supplier..." autocomplete="off" class="clinical-input">
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+      <select name="status" class="clinical-input" style="width: auto; min-width: 150px;">
+        <option value="all" {% if status_filter == "all" %}selected{% endif %}>All batches</option>
+        <option value="active" {% if status_filter == "active" %}selected{% endif %}>Active / Available</option>
+        <option value="low_stock" {% if status_filter == "low_stock" %}selected{% endif %}>Low Stock (&lt; 10)</option>
+        <option value="expired" {% if status_filter == "expired" %}selected{% endif %}>Expired</option>
+        <option value="quarantined" {% if status_filter == "quarantined" %}selected{% endif %}>Quarantined</option>
+      </select>
+      <button type="submit" class="btn-stitch-primary">Filter</button>
+      {% if query or status_filter != "all" %}
+        <a href="{% url 'batch_list' %}" class="btn-stitch-secondary">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+</section>
+
+<!-- Batch Inventory Table -->
+<section class="stitch-panel" aria-labelledby="batch-list-heading">
+  <div class="stitch-panel-header" style="margin-bottom: 1rem;">
+    <h2 id="batch-list-heading" style="font-size: 1.15rem; font-weight: 700; color: var(--color-secondary); margin: 0;">FEFO Inventory Batches</h2>
+    <span class="badge badge-info">{{ page_obj.paginator.count }} batch{{ page_obj.paginator.count|pluralize:"es" }}</span>
+  </div>
+
+  <div class="patient-table-scroll">
+    <table class="patient-directory-table">
+      <thead>
+        <tr>
+          <th scope="col">Batch #</th>
+          <th scope="col">Medicine</th>
+          <th scope="col">Expiry Date (FEFO)</th>
+          <th scope="col">On Hand / Received</th>
+          <th scope="col">Unit Price (Sale)</th>
+          <th scope="col">Status</th>
+          <th scope="col" style="text-align: right;">Actions &amp; Controls</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for batch in batches %}
+          <tr>
+            <td>
+              <a href="{% url 'batch_detail' batch.pk %}" style="font-weight: 700; color: var(--color-primary); text-decoration: none;">
+                <code>{{ batch.batch_number }}</code>
+              </a>
+              {% if batch.receipt %}
+                <div style="font-size: 0.6875rem; color: var(--color-text-muted);">Receipt: {{ batch.receipt.number }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <strong style="color: var(--color-secondary); font-size: 0.9375rem;">{{ batch.medicine.generic_name }}</strong>
+              {% if batch.medicine.brand_name %}
+                <div style="font-size: 0.8125rem; color: var(--color-text-muted);">{{ batch.medicine.brand_name }} ({{ batch.medicine.code }})</div>
+              {% else %}
+                <div style="font-size: 0.8125rem; color: var(--color-text-muted);">Code: {{ batch.medicine.code }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <span>{{ batch.expiry_date }}</span>
+              {% if batch.expiry_date < today %}
+                <div><span class="badge badge-danger">Expired</span></div>
+              {% endif %}
+            </td>
+            <td>
+              <strong>{{ batch.quantity_on_hand }}</strong>
+              <span style="font-size: 0.8125rem; color: var(--color-text-muted);">/ {{ batch.quantity_received }} {{ batch.medicine.unit }}</span>
+              {% if batch.quantity_on_hand < 10 and not batch.is_quarantined %}
+                <div><span class="badge badge-warning">Low stock</span></div>
+              {% endif %}
+            </td>
+            <td>
+              <span>₹{{ batch.sale_price }}</span>
+              <div style="font-size: 0.6875rem; color: var(--color-text-muted);">Cost: ₹{{ batch.purchase_price }}</div>
+            </td>
+            <td>
+              {% if batch.is_quarantined %}
+                <span class="badge badge-danger">Quarantined</span>
+              {% elif batch.expiry_date < today %}
+                <span class="badge badge-danger">Expired</span>
+              {% elif batch.quantity_on_hand == 0 %}
+                <span class="badge badge-neutral">Depleted</span>
+              {% else %}
+                <span class="badge badge-success">Available</span>
+              {% endif %}
+            </td>
+            <td style="text-align: right;">
+              <div style="display: inline-flex; gap: 0.35rem; align-items: center; justify-content: flex-end;">
+                <a href="{% url 'batch_detail' batch.pk %}" class="btn-stitch-secondary" style="padding: 0.25rem 0.65rem; font-size: 0.8125rem; min-height: 28px;">
+                  Detail
+                </a>
+                {% if can_adjust %}
+                  <form method="post" action="{% url 'batch_quarantine' batch.pk %}" style="display: inline-block; margin: 0;">
+                    {% csrf_token %}
+                    <input type="hidden" name="request_key" value="{{ batch.quarantine_request_key }}">
+                    <input type="hidden" name="next" value="{% url 'batch_list' %}">
+                    <input type="hidden" name="is_quarantined" value="{{ batch.is_quarantined|yesno:'false,true' }}">
+                    <input type="hidden" name="reason" value="{% if batch.is_quarantined %}Released via batch workspace{% else %}Quarantined via batch workspace{% endif %}">
+                    <button type="submit" class="{% if batch.is_quarantined %}btn-stitch-secondary{% else %}btn-stitch-danger{% endif %}" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; min-height: 28px;">
+                      {% if batch.is_quarantined %}Release{% else %}Quarantine{% endif %}
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 3rem 1rem; color: var(--color-text-muted);">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.5rem; opacity: 0.6;"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+              <div>No inventory batches found matching the specified criteria.</div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+    <div style="margin-top: 1.5rem;">
+      {% include "core/components/pagination.html" %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

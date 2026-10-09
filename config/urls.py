@@ -151,6 +151,16 @@ urlpatterns = [
         views.medicine_update,
         name="medicine_update",
     ),
+    path(
+        "store/batches/",
+        views.batch_list,
+        name="batch_list",
+    ),
+    path(
+        "store/batches/<int:pk>/",
+        views.batch_detail,
+        name="batch_detail",
+    ),
     path("accounts/", include("django.contrib.auth.urls")),
 ]
 

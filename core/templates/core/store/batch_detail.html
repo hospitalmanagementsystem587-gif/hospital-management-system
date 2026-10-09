@@ -1,0 +1,200 @@
+{% extends "core/base.html" %}
+
+{% block title %}Batch {{ batch.batch_number }} | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="portal-badge" style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+      <span class="badge badge-info">Store portal</span>
+      <span class="badge badge-success">Batch Management</span>
+    </div>
+    <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-secondary); margin: 0 0 0.25rem 0;">Batch: {{ batch.batch_number }}</h1>
+    <p style="color: var(--color-text-muted); font-size: 0.9375rem; margin: 0;">{{ batch.medicine.generic_name }} ({{ batch.medicine.code }})</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <a href="{% url 'batch_list' %}" class="btn-stitch-secondary">
+      &larr; Back to Batches
+    </a>
+    <a href="{% url 'pharmacy_dashboard' %}" class="btn-stitch-secondary">
+      Store Dashboard
+    </a>
+  </div>
+</div>
+
+<div class="workspace-split" style="margin-bottom: 2rem;">
+  <!-- Batch Specifications -->
+  <div class="stitch-panel">
+    <div class="stitch-panel-header" style="margin-bottom: 1rem;">
+      <h2 style="font-size: 1.15rem; font-weight: 700; color: var(--color-secondary); margin: 0;">Batch Specifications</h2>
+      <div>
+        {% if batch.is_quarantined %}
+          <span class="badge badge-danger">Quarantined</span>
+        {% elif batch.expiry_date < today %}
+          <span class="badge badge-danger">Expired</span>
+        {% elif batch.quantity_on_hand == 0 %}
+          <span class="badge badge-neutral">Depleted</span>
+        {% else %}
+          <span class="badge badge-success">Available</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+      <div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700;">Medicine</div>
+        <div style="font-size: 1rem; font-weight: 700; color: var(--color-secondary);">{{ batch.medicine.generic_name }}</div>
+        {% if batch.medicine.brand_name %}<div style="font-size: 0.8125rem; color: var(--color-text-muted);">{{ batch.medicine.brand_name }}</div>{% endif %}
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700;">Expiry Date (FEFO)</div>
+        <div style="font-size: 1rem; font-weight: 700; color: {% if batch.expiry_date < today %}var(--color-danger){% else %}var(--color-secondary){% endif %};">
+          {{ batch.expiry_date }}
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700;">Stock On Hand</div>
+        <div style="font-size: 1.25rem; font-weight: 800; color: var(--color-primary);">{{ batch.quantity_on_hand }} {{ batch.medicine.unit }}</div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted);">Received: {{ batch.quantity_received }} {{ batch.medicine.unit }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700;">Pricing</div>
+        <div style="font-size: 1rem; font-weight: 700; color: var(--color-secondary);">Sale: ₹{{ batch.sale_price }}</div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted);">Purchase: ₹{{ batch.purchase_price }}</div>
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700;">Receipt &amp; Supplier</div>
+        {% if batch.receipt %}
+          <div style="font-size: 0.875rem; font-weight: 600;">{{ batch.receipt.number }}</div>
+          <div style="font-size: 0.75rem; color: var(--color-text-muted);">{{ batch.receipt.supplier.name|default:"Direct" }}</div>
+        {% else %}
+          <div style="font-size: 0.875rem; color: var(--color-text-muted);">None</div>
+        {% endif %}
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700;">Created / Updated</div>
+        <div style="font-size: 0.8125rem; color: var(--color-text-muted);">{{ batch.created_at|date:"M d, Y H:i" }}</div>
+        <div style="font-size: 0.75rem; color: var(--color-text-muted);">Modified: {{ batch.updated_at|date:"M d, Y H:i" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Controls (Stock Adjustment & Quarantine) -->
+  {% if can_adjust %}
+    <div class="stitch-panel">
+      <div class="stitch-panel-header" style="margin-bottom: 1rem;">
+        <h2 style="font-size: 1.15rem; font-weight: 700; color: var(--color-secondary); margin: 0;">Stock Adjustment &amp; Control</h2>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <!-- Stock Adjustment Form -->
+        <form method="post" action="{% url 'stock_adjustment' batch.pk %}" style="display: flex; flex-direction: column; gap: 0.5rem;">
+          {% csrf_token %}
+          <input type="hidden" name="request_key" value="{{ batch.adjust_request_key }}">
+          <input type="hidden" name="next" value="{% url 'batch_detail' batch.pk %}">
+          <label style="font-size: 0.8125rem; font-weight: 700; color: var(--color-secondary);">Adjust Stock Quantity</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="number" name="quantity_delta" step="0.001" placeholder="+/- Qty" required class="clinical-input" style="width: 110px;">
+            <input type="text" name="reason" placeholder="Audited reason (e.g. Breakage, Correction)" required class="clinical-input" style="flex: 1;">
+            <button type="submit" class="btn-stitch-primary" style="white-space: nowrap;">Apply Adjustment</button>
+          </div>
+        </form>
+
+        <hr style="border: none; border-top: 1px solid var(--color-border); margin: 0;">
+
+        <!-- Quarantine Control Form -->
+        <form method="post" action="{% url 'batch_quarantine' batch.pk %}" style="display: flex; flex-direction: column; gap: 0.5rem;">
+          {% csrf_token %}
+          <input type="hidden" name="request_key" value="{{ batch.quarantine_request_key }}">
+          <input type="hidden" name="next" value="{% url 'batch_detail' batch.pk %}">
+          <input type="hidden" name="is_quarantined" value="{{ batch.is_quarantined|yesno:'false,true' }}">
+          <label style="font-size: 0.8125rem; font-weight: 700; color: var(--color-secondary);">Quarantine State Toggle</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="text" name="reason" placeholder="Quarantine reason / inspection notes" required class="clinical-input" style="flex: 1;">
+            <button type="submit" class="{% if batch.is_quarantined %}btn-stitch-secondary{% else %}btn-stitch-danger{% endif %}" style="white-space: nowrap;">
+              {% if batch.is_quarantined %}Release from Quarantine{% else %}Quarantine Batch{% endif %}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Stock Movement Audit Ledger -->
+<section class="stitch-panel" aria-labelledby="movements-heading">
+  <div class="stitch-panel-header" style="margin-bottom: 1rem;">
+    <h2 id="movements-heading" style="font-size: 1.15rem; font-weight: 700; color: var(--color-secondary); margin: 0;">Stock Movement Ledger (Audit Trail)</h2>
+    <span class="badge badge-info">{{ movements|length }} recorded movement{{ movements|length|pluralize }}</span>
+  </div>
+
+  <div class="patient-table-scroll">
+    <table class="patient-directory-table">
+      <thead>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col">Kind</th>
+          <th scope="col">Delta</th>
+          <th scope="col">Before &rarr; After</th>
+          <th scope="col">Reference</th>
+          <th scope="col">Actor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in movements %}
+          <tr>
+            <td><code>#{{ m.id }}</code></td>
+            <td>
+              {% if m.kind == 'receipt' %}
+                <span class="badge badge-success">Receipt</span>
+              {% elif m.kind == 'dispense' %}
+                <span class="badge badge-info">Dispense</span>
+              {% elif m.kind == 'sale' %}
+                <span class="badge badge-primary">Sale</span>
+              {% elif m.kind == 'return' %}
+                <span class="badge badge-warning">Return</span>
+              {% elif m.kind == 'adjustment' %}
+                <span class="badge badge-neutral">Adjustment</span>
+              {% elif m.kind == 'quarantine' %}
+                <span class="badge badge-danger">Quarantine</span>
+              {% elif m.kind == 'expiry' %}
+                <span class="badge badge-danger">Expiry</span>
+              {% else %}
+                <span class="badge badge-neutral">{{ m.get_kind_display }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <strong style="color: {% if m.quantity_delta > 0 %}var(--color-success){% else %}var(--color-danger){% endif %};">
+                {% if m.quantity_delta > 0 %}+{% endif %}{{ m.quantity_delta }}
+              </strong>
+            </td>
+            <td>
+              <span>{{ m.quantity_before }} &rarr; <strong>{{ m.quantity_after }}</strong></span>
+            </td>
+            <td>
+              {% if m.reference_type %}
+                <span style="font-size: 0.8125rem;">{{ m.reference_type }}: <code>{{ m.reference_id }}</code></span>
+              {% else %}
+                <span style="color: var(--color-text-muted);">-</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if m.actor %}
+                <span>{{ m.actor.user.get_full_name|default:m.actor.user.username }}</span>
+              {% else %}
+                <span style="color: var(--color-text-muted);">System</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 2rem; color: var(--color-text-muted);">
+              No movements recorded for this batch.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

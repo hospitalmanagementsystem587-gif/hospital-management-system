@@ -1537,13 +1537,14 @@ def stock_adjustment(request, pk):
         return HttpResponseBadRequest("Stock adjustment must be a valid number.")
     if not delta.is_finite() or delta == 0:
         return HttpResponseBadRequest("Stock adjustment must be nonzero.")
+    redirect_url = request.POST.get("next") or "pharmacy_prescription_list"
     if StockMovement.objects.filter(request_key=request_key).exists():
-        return redirect("pharmacy_prescription_list")
+        return redirect(redirect_url)
 
     with transaction.atomic():
         batch = get_object_or_404(MedicineBatch.objects.select_for_update(), pk=pk)
         if StockMovement.objects.filter(request_key=request_key).exists():
-            return redirect("pharmacy_prescription_list")
+            return redirect(redirect_url)
         before = batch.quantity_on_hand
         after = before + delta
         if after < 0:
@@ -1569,7 +1570,7 @@ def stock_adjustment(request, pk):
             actor=audit.actor,
         )
     messages.success(request, f"Stock adjusted for batch {batch.batch_number}.")
-    return redirect("pharmacy_prescription_list")
+    return redirect(redirect_url)
 
 
 @permission_required("core.adjust_stock", raise_exception=True)
@@ -1585,8 +1586,9 @@ def batch_quarantine(request, pk):
     value = request.POST.get("is_quarantined", "")
     if not reason or value not in {"true", "false"}:
         return HttpResponseBadRequest("A reason and quarantine state are required.")
+    redirect_url = request.POST.get("next") or "pharmacy_prescription_list"
     if AuditEvent.objects.filter(details__request_key=str(request_key)).exists():
-        return redirect("pharmacy_prescription_list")
+        return redirect(redirect_url)
 
     with transaction.atomic():
         batch = get_object_or_404(MedicineBatch.objects.select_for_update(), pk=pk)
@@ -1605,7 +1607,7 @@ def batch_quarantine(request, pk):
         )
     state_label = "quarantined" if batch.is_quarantined else "released from quarantine"
     messages.success(request, f"Batch {batch.batch_number} {state_label}.")
-    return redirect("pharmacy_prescription_list")
+    return redirect(redirect_url)
 
 
 @permission_required("core.add_dispensing", raise_exception=True)
@@ -2219,5 +2221,104 @@ def medicine_update(request, pk):
             "form": form,
             "creating": False,
             "medicine": medicine,
+        },
+    )
+
+
+@permission_required("core.view_medicinebatch", raise_exception=True)
+def batch_list(request):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have access to inventory batches.")
+
+    today = timezone.localdate()
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "all").strip()
+
+    batches = (
+        MedicineBatch.objects.select_related("medicine", "receipt", "receipt__supplier")
+        .all()
+        .order_by("expiry_date", "pk")
+    )
+
+    if query:
+        batches = batches.filter(
+            Q(batch_number__icontains=query)
+            | Q(medicine__generic_name__icontains=query)
+            | Q(medicine__brand_name__icontains=query)
+            | Q(medicine__code__icontains=query)
+            | Q(receipt__supplier__name__icontains=query)
+        )
+
+    if status_filter == "quarantined":
+        batches = batches.filter(is_quarantined=True)
+    elif status_filter == "expired":
+        batches = batches.filter(expiry_date__lt=today)
+    elif status_filter == "low_stock":
+        batches = batches.filter(quantity_on_hand__lt=10, is_quarantined=False)
+    elif status_filter == "active":
+        batches = batches.filter(
+            expiry_date__gte=today, is_quarantined=False, quantity_on_hand__gt=0
+        )
+
+    paginator = Paginator(batches, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    for batch in page_obj:
+        batch.adjust_request_key = uuid.uuid4()
+        batch.quarantine_request_key = uuid.uuid4()
+
+    can_adjust = request.user.has_perm("core.adjust_stock") and (
+        request.user.is_superuser
+        or request.user.groups.filter(name="Pharmacy").exists()
+    )
+
+    return render(
+        request,
+        "core/store/batch_list.html",
+        {
+            "page_obj": page_obj,
+            "batches": page_obj,
+            "query": query,
+            "status_filter": status_filter,
+            "today": today,
+            "can_adjust": can_adjust,
+        },
+    )
+
+
+@permission_required("core.view_medicinebatch", raise_exception=True)
+def batch_detail(request, pk):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have access to inventory batches.")
+
+    batch = get_object_or_404(
+        MedicineBatch.objects.select_related("medicine", "receipt", "receipt__supplier"),
+        pk=pk,
+    )
+    movements = batch.movements.select_related("actor").order_by("-id")
+
+    batch.adjust_request_key = uuid.uuid4()
+    batch.quarantine_request_key = uuid.uuid4()
+
+    can_adjust = request.user.has_perm("core.adjust_stock") and (
+        request.user.is_superuser
+        or request.user.groups.filter(name="Pharmacy").exists()
+    )
+
+    return render(
+        request,
+        "core/store/batch_detail.html",
+        {
+            "batch": batch,
+            "movements": movements,
+            "today": timezone.localdate(),
+            "can_adjust": can_adjust,
         },
     )
