@@ -5,6 +5,8 @@ from django.contrib.auth.models import Group
 from django.test import TransactionTestCase
 from django.utils import timezone
 from django.core.cache import cache
+from django.db import connection
+from unittest import skipIf
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -473,6 +475,7 @@ class PatientApiTests(TransactionTestCase):
         res_refresh = self.client.post("/api/v1/auth/token/refresh/", {"refresh": refresh})
         self.assertEqual(res_refresh.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    @skipIf(connection.vendor == "sqlite", "SQLite table locks cannot exercise PostgreSQL row-level concurrency")
     def test_concurrent_booking_slot_conflict_prevention(self):
         from rest_framework_simplejwt.tokens import RefreshToken
         import threading
@@ -1104,4 +1107,3 @@ class PatientApiTests(TransactionTestCase):
         # Once withdrawn, public list has 0
         res_pub_with = self.client.get("/api/v1/feedback/public/")
         self.assertEqual(len(res_pub_with.data), 0)
-
