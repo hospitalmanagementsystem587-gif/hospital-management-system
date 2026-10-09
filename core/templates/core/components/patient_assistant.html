@@ -1,0 +1,48 @@
+<aside class="care-guide" data-care-guide data-page="{{ request.resolver_match.url_name|default:'patient_home' }}" aria-label="Patient portal guide">
+  <button class="care-guide__launcher" type="button" data-care-guide-toggle aria-expanded="false" aria-controls="care-guide-panel">
+    <span class="care-guide__avatar care-guide__avatar--launcher" aria-hidden="true">
+      <svg viewBox="0 0 80 80" role="img">
+        <defs><linearGradient id="guide-face-mini" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e0f2fe"/><stop offset="1" stop-color="#bae6fd"/></linearGradient></defs>
+        <path d="M15 37c0-18 10-29 25-29s25 11 25 29v8c0 17-10 27-25 27S15 62 15 45Z" fill="url(#guide-face-mini)" stroke="currentColor" stroke-width="3"/>
+        <path d="M28 36c3-3 7-3 10 0M48 36c3-3 7-3 10 0" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        <path d="M33 53c4 4 10 4 14 0" fill="none" stroke="#0284c7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M40 8V2M37 5h6" stroke="#16a34a" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span class="care-guide__launcher-copy"><strong>Need help?</strong><small>Open Care Guide</small></span>
+  </button>
+
+  <section class="care-guide__panel" id="care-guide-panel" data-care-guide-panel hidden>
+    <header class="care-guide__header">
+      <span class="care-guide__avatar" aria-hidden="true">
+        <svg viewBox="0 0 96 96" role="img">
+          <defs><linearGradient id="guide-face" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f0f9ff"/><stop offset="1" stop-color="#bae6fd"/></linearGradient></defs>
+          <path class="care-guide__body" d="M18 45C18 23 30 9 48 9s30 14 30 36v9c0 20-12 32-30 32S18 74 18 54Z" fill="url(#guide-face)" stroke="currentColor" stroke-width="3"/>
+          <g class="care-guide__eyes" fill="currentColor"><ellipse cx="36" cy="44" rx="4" ry="5"/><ellipse cx="60" cy="44" rx="4" ry="5"/></g>
+          <path d="M38 63c6 5 14 5 20 0" fill="none" stroke="#0284c7" stroke-width="3" stroke-linecap="round"/>
+          <path d="M48 9V2M44.5 5.5h7" stroke="#16a34a" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="30" cy="55" r="4" fill="#fda4af" opacity=".45"/><circle cx="66" cy="55" r="4" fill="#fda4af" opacity=".45"/>
+        </svg>
+      </span>
+      <div><strong>Vedant Care Guide</strong><span>Portal help—not medical advice</span></div>
+      <button class="care-guide__close" type="button" data-care-guide-close aria-label="Close Care Guide">×</button>
+    </header>
+
+    <div class="care-guide__content" aria-live="polite">
+      <p class="care-guide__greeting">Hello! I can help you find the right place in your patient portal.</p>
+      <p class="care-guide__context" data-care-guide-message></p>
+      <nav class="care-guide__actions" aria-label="Care Guide quick actions">
+        <a href="{% url 'patient_appointment_book' %}">Book an appointment</a>
+        <a href="{% url 'patient_document_list' %}">Find reports</a>
+        <a href="{% url 'patient_prescription_history' %}">View prescriptions</a>
+        <a href="{% url 'patient_ticket_create' %}">Contact support</a>
+      </nav>
+      <p class="care-guide__safety">For urgent medical help, contact the hospital or emergency services directly.</p>
+    </div>
+
+    <footer class="care-guide__footer">
+      <button type="button" data-care-guide-dismiss>Hide for this visit</button>
+      <span>No patient information leaves this page.</span>
+    </footer>
+  </section>
+</aside>
