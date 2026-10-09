@@ -45,6 +45,7 @@ from .models import (
     AuditEvent,
     Bed,
     Consultation,
+    Department,
     Adjustment,
     Dispensing,
     DispensingLine,
@@ -65,6 +66,7 @@ from .models import (
     PrescriptionItem,
     ReturnLine,
     Service,
+    Specialty,
     StaffProfile,
     StockMovement,
     StockReceipt,
@@ -2887,3 +2889,84 @@ def patient_appointment_cancel(request, pk):
         )
     messages.success(request, "Your appointment has been cancelled.")
     return redirect("patient_dashboard")
+
+
+def patient_doctor_directory(request):
+    patient = _get_verified_patient_for_request(request)
+
+    qs = (
+        StaffProfile.objects.filter(
+            user__groups__name="Doctor",
+            user__is_active=True,
+            department__is_active=True,
+            is_public=True,
+        )
+        .select_related("user", "department")
+        .prefetch_related(
+            "doctor_specialties__specialty",
+            "schedules",
+        )
+        .order_by("user__first_name", "user__last_name", "pk")
+    )
+
+    department_filter = request.GET.get("department", "").strip()
+    if department_filter:
+        qs = qs.filter(
+            Q(department__code__iexact=department_filter)
+            | Q(department__name__iexact=department_filter)
+        )
+
+    specialty_filter = request.GET.get("specialty", "").strip()
+    if specialty_filter:
+        qs = qs.filter(
+            Q(doctor_specialties__specialty__code__iexact=specialty_filter)
+            | Q(doctor_specialties__specialty__name__iexact=specialty_filter)
+        ).distinct()
+
+    query = request.GET.get("q", "").strip()
+    if query:
+        qs = qs.filter(
+            Q(user__first_name__icontains=query)
+            | Q(user__last_name__icontains=query)
+            | Q(department__name__icontains=query)
+            | Q(qualifications__icontains=query)
+            | Q(biography__icontains=query)
+            | Q(doctor_specialties__specialty__name__icontains=query)
+        ).distinct()
+
+    departments = (
+        Department.objects.filter(is_active=True)
+        .order_by("name")
+    )
+    specialties = (
+        Specialty.objects.filter(is_active=True)
+        .order_by("name")
+    )
+
+    doctors_data = []
+    for doc in qs:
+        primary_rel = doc.doctor_specialties.filter(
+            is_primary=True, specialty__is_active=True
+        ).select_related("specialty").first()
+        active_schedules = doc.schedules.filter(is_active=True).order_by("weekday", "start_time")
+        doctors_data.append({
+            "doctor": doc,
+            "full_name": doc.user.get_full_name() or doc.user.username,
+            "primary_specialty": primary_rel.specialty.name if primary_rel else None,
+            "consultation_price": doc.get_consultation_price(scope="initial"),
+            "schedules": active_schedules,
+        })
+
+    return render(
+        request,
+        "core/patient/doctor_directory.html",
+        {
+            "patient": patient,
+            "doctors_data": doctors_data,
+            "departments": departments,
+            "specialties": specialties,
+            "selected_department": department_filter,
+            "selected_specialty": specialty_filter,
+            "query": query,
+        },
+    )

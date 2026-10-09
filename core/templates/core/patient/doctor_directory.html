@@ -1,0 +1,158 @@
+{% extends "core/base.html" %}
+
+{% block title %}Doctor Directory | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="patient-workspace" style="max-width: 1100px; margin: 2rem auto; padding: 0 1rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <a href="{% url 'patient_dashboard' %}" style="display: inline-flex; align-items: center; gap: 0.5rem; color: #0284c7; text-decoration: none; font-weight: 500; font-size: 0.875rem; margin-bottom: 0.75rem;">
+        &larr; Back to Dashboard
+      </a>
+      <h1 style="font-size: 1.875rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem 0;">Doctor Directory</h1>
+      <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+        Browse our verified medical specialists, published OPD schedules, and consultation fees.
+      </p>
+    </div>
+    <a href="{% url 'patient_appointment_book' %}" class="btn-stitch-primary" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+      Book Consultation
+    </a>
+  </div>
+
+  <!-- Search and Filters Form -->
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+    <form method="get" action="." style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) auto; gap: 1rem; align-items: end;">
+      <div>
+        <label for="id_search" style="display: block; font-weight: 600; color: #1e293b; margin-bottom: 0.4rem; font-size: 0.8125rem;">
+          Search Doctor or Keyword
+        </label>
+        <input type="text" name="q" id="id_search" value="{{ query }}" placeholder="Search by name, qualification..." class="appointment-control" style="width: 100%;">
+      </div>
+
+      <div>
+        <label for="id_department" style="display: block; font-weight: 600; color: #1e293b; margin-bottom: 0.4rem; font-size: 0.8125rem;">
+          Department
+        </label>
+        <select name="department" id="id_department" class="appointment-control" style="width: 100%;">
+          <option value="">All Departments</option>
+          {% for dept in departments %}
+            <option value="{{ dept.code }}" {% if selected_department == dept.code or selected_department == dept.name %}selected{% endif %}>
+              {{ dept.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label for="id_specialty" style="display: block; font-weight: 600; color: #1e293b; margin-bottom: 0.4rem; font-size: 0.8125rem;">
+          Specialty
+        </label>
+        <select name="specialty" id="id_specialty" class="appointment-control" style="width: 100%;">
+          <option value="">All Specialties</option>
+          {% for sp in specialties %}
+            <option value="{{ sp.code }}" {% if selected_specialty == sp.code or selected_specialty == sp.name %}selected{% endif %}>
+              {{ sp.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem;">
+        <button type="submit" class="btn-stitch-primary" style="padding: 0.6rem 1.25rem;">
+          Filter
+        </button>
+        {% if query or selected_department or selected_specialty %}
+          <a href="." class="btn-stitch-secondary" style="padding: 0.6rem 1rem;">
+            Reset
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Doctors Directory List -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    {% for item in doctors_data %}
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.75rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 0.25rem 0;">
+              Dr. {{ item.full_name }}
+            </h2>
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
+              <span class="badge badge-info">{{ item.doctor.department.name }}</span>
+              {% if item.primary_specialty %}
+                <span class="badge badge-success">{{ item.primary_specialty }}</span>
+              {% endif %}
+              {% if item.doctor.experience_years %}
+                <span style="font-size: 0.8125rem; color: #64748b;">{{ item.doctor.experience_years }} yrs experience</span>
+              {% endif %}
+            </div>
+            {% if item.doctor.qualifications %}
+              <div style="font-size: 0.875rem; color: #475569; margin-bottom: 0.25rem;">
+                <strong>Qualifications:</strong> {{ item.doctor.qualifications }}
+              </div>
+            {% endif %}
+            {% if item.doctor.languages %}
+              <div style="font-size: 0.875rem; color: #475569;">
+                <strong>Languages:</strong> {{ item.doctor.languages }}
+              </div>
+            {% endif %}
+          </div>
+
+          <div style="text-align: right; min-width: 150px;">
+            <div style="font-size: 0.8125rem; color: #64748b; margin-bottom: 0.25rem;">Consultation Fee</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: #0284c7; margin-bottom: 0.75rem;">
+              ₹{{ item.consultation_price }}
+            </div>
+            <a href="{% url 'patient_appointment_book' %}?doctor={{ item.doctor.pk }}" class="btn-stitch-primary" style="font-size: 0.8125rem; padding: 0.4rem 0.9rem;">
+              Book Slot
+            </a>
+          </div>
+        </div>
+
+        {% if item.doctor.biography %}
+          <div style="background: #f8fafc; border-radius: 8px; padding: 0.875rem 1.125rem; font-size: 0.875rem; color: #334155; margin-bottom: 1rem; line-height: 1.5;">
+            {{ item.doctor.biography }}
+          </div>
+        {% endif %}
+
+        <!-- Published Schedules -->
+        <div style="border-top: 1px solid #f1f5f9; padding-top: 1rem;">
+          <h3 style="font-size: 0.875rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.5rem 0;">
+            Published OPD Schedules
+          </h3>
+          {% if item.schedules %}
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+              {% for sch in item.schedules %}
+                <span style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.35rem 0.75rem; font-size: 0.8125rem; color: #334155;">
+                  <strong>{{ sch.get_weekday_display }}:</strong> {{ sch.start_time|time:"H:i" }} - {{ sch.end_time|time:"H:i" }}
+                  {% if sch.opd_room %}&bull; {{ sch.opd_room }}{% endif %}
+                </span>
+              {% endfor %}
+            </div>
+          {% elif item.doctor.opd_schedule %}
+            <div style="font-size: 0.8125rem; color: #64748b;">
+              {{ item.doctor.opd_schedule }}{% if item.doctor.opd_room %} ({{ item.doctor.opd_room }}){% endif %}
+            </div>
+          {% else %}
+            <div style="font-size: 0.8125rem; color: #94a3b8;">
+              No regular schedule published. Appointments available via booking desk.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% empty %}
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 3rem; text-align: center; color: #64748b;">
+        <p style="margin: 0; font-size: 1rem;">No matching doctors found in the directory.</p>
+        {% if query or selected_department or selected_specialty %}
+          <div style="margin-top: 1rem;">
+            <a href="." class="btn-stitch-secondary">Clear Filters</a>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

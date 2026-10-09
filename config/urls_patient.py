@@ -24,5 +24,10 @@ urlpatterns = [
         views.patient_appointment_cancel,
         name="patient_appointment_cancel",
     ),
+    path(
+        "doctors/",
+        views.patient_doctor_directory,
+        name="patient_doctor_directory",
+    ),
     path("", include("config.portal_urls")),
 ]
