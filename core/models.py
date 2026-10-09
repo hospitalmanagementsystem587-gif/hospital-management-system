@@ -1900,6 +1900,23 @@ class Ticket(TimestampedModel):
         related_name="tickets",
     )
 
+    # Assignment fields
+    assigned_to = models.ForeignKey(
+        StaffProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_tickets",
+    )
+    assigned_team = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_tickets",
+    )
+    assigned_at = models.DateTimeField(null=True, blank=True)
+
     # Lifecycle timestamps
     resolved_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
@@ -1910,6 +1927,8 @@ class Ticket(TimestampedModel):
             models.Index(fields=["status", "priority"], name="ticket_status_prio_idx"),
             models.Index(fields=["patient", "status"], name="ticket_patient_status_idx"),
             models.Index(fields=["category", "status"], name="ticket_category_status_idx"),
+            models.Index(fields=["assigned_to", "status"], name="ticket_assigned_status_idx"),
+            models.Index(fields=["assigned_team", "status"], name="ticket_team_status_idx"),
             models.Index(fields=["created_at"], name="ticket_created_at_idx"),
         ]
         constraints = [
@@ -1956,6 +1975,43 @@ class Ticket(TimestampedModel):
     def __str__(self):
         return f"{self.number}: {self.title} ({self.get_status_display()})"
 
+    def assign(self, staff_profile=None, team=None, actor=None, reason=""):
+        """
+        Thread-safe assignment engine operation using row-level locking.
+        """
+        from django.db import transaction
+        now = timezone.now()
+        with transaction.atomic():
+            locked = Ticket.objects.select_for_update().get(pk=self.pk)
+            prev_assigned_to = locked.assigned_to
+            prev_team = locked.assigned_team
+
+            locked.assigned_to = staff_profile
+            locked.assigned_team = team
+            locked.assigned_at = now if (staff_profile or team) else None
+            locked.save(update_fields=["assigned_to", "assigned_team", "assigned_at", "updated_at"])
+
+            # Create an internal ticket audit note if actor provided
+            if actor:
+                actor_user = getattr(actor, "user", actor)
+                assignee_name = str(staff_profile) if staff_profile else "Unassigned"
+                team_name = team.name if team else "None"
+                msg_body = f"Assignment changed to {assignee_name} (Team: {team_name})."
+                if reason:
+                    msg_body += f" Reason: {reason}"
+                TicketMessage.objects.create(
+                    ticket=locked,
+                    author=actor_user,
+                    body=msg_body,
+                    is_internal=True,
+                )
+
+            # Update in-memory state of self
+            self.assigned_to = locked.assigned_to
+            self.assigned_team = locked.assigned_team
+            self.assigned_at = locked.assigned_at
+            return locked
+
     def save(self, *args, **kwargs):
         if not self.number:
             from core.services.numbering import next_number
@@ -1966,6 +2022,11 @@ class Ticket(TimestampedModel):
             self.number = next_number("TICKET")
 
         now = timezone.now()
+        if (self.assigned_to or self.assigned_team) and not self.assigned_at:
+            self.assigned_at = now
+        elif not self.assigned_to and not self.assigned_team:
+            self.assigned_at = None
+
         if self.status in [self.Status.RESOLVED, self.Status.CLOSED] and not self.resolved_at:
             self.resolved_at = now
         elif self.status not in [self.Status.RESOLVED, self.Status.CLOSED]:

@@ -1022,13 +1022,15 @@ class TicketAdmin(admin.ModelAdmin):
         "category",
         "priority",
         "status",
+        "assigned_to",
+        "assigned_team",
         "created_by",
         "patient",
         "created_at",
     )
-    list_filter = ("status", "priority", "category", "created_at")
+    list_filter = ("status", "priority", "category", "assigned_team", "created_at")
     search_fields = ("number", "title", "description", "patient__full_name", "patient__mrn")
-    readonly_fields = ("number", "created_at", "updated_at", "resolved_at", "closed_at")
+    readonly_fields = ("number", "created_at", "updated_at", "assigned_at", "resolved_at", "closed_at")
     inlines = [TicketMessageInline, TicketAttachmentInline]
 
 
