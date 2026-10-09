@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.db import transaction
@@ -27,6 +28,7 @@ from .forms import (
     ConsultationForm,
     DischargeForm,
     InpatientDepositForm,
+    MedicineForm,
     PatientDocumentForm,
     PatientForm,
     PrescriptionItemFormSet,
@@ -1197,7 +1199,9 @@ def prescription_print(request, pk):
     if _has_role(request.user, "Doctor"):
         profile = _doctor_profile(request.user)
         prescriptions = Prescription.objects.filter(doctor=profile)
-    elif _has_role(request.user, "Pharmacy") or _has_role(request.user, "Administrator"):
+    elif _has_role(request.user, "Pharmacy"):
+        prescriptions = Prescription.objects.filter(status=Prescription.Status.ISSUED)
+    elif _has_role(request.user, "Administrator"):
         prescriptions = Prescription.objects.all()
     else:
         raise PermissionDenied
@@ -2064,3 +2068,134 @@ def pharmacy_dashboard(request):
         ).count(),
     }
     return render(request, "core/store/dashboard.html", context)
+
+
+def _audit_medicine_change(request, medicine, action, details):
+    actor = StaffProfile.objects.filter(user=request.user).first()
+    AuditEvent.objects.create(
+        actor=actor,
+        action=action,
+        target_type="medicine",
+        target_id=str(medicine.pk),
+        details=details,
+    )
+
+
+@permission_required("core.view_medicine", raise_exception=True)
+def medicine_list(request):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have access to the medicine catalog.")
+
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "all").strip()
+
+    medicines = Medicine.objects.all().order_by("generic_name", "brand_name", "code")
+
+    if status_filter == "active":
+        medicines = medicines.filter(is_active=True)
+    elif status_filter == "inactive":
+        medicines = medicines.filter(is_active=False)
+
+    if query:
+        medicines = medicines.filter(
+            Q(code__icontains=query)
+            | Q(generic_name__icontains=query)
+            | Q(brand_name__icontains=query)
+            | Q(barcode__icontains=query)
+        )
+
+    paginator = Paginator(medicines, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    can_manage = (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    )
+
+    return render(
+        request,
+        "core/store/medicine_list.html",
+        {
+            "page_obj": page_obj,
+            "medicines": page_obj,
+            "query": query,
+            "status_filter": status_filter,
+            "can_manage": can_manage,
+        },
+    )
+
+
+@permission_required("core.add_medicine", raise_exception=True)
+def medicine_create(request):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have permission to add medicines.")
+
+    form = MedicineForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            medicine = form.save()
+            _audit_medicine_change(
+                request,
+                medicine,
+                "pharmacy.medicine_created",
+                {
+                    "code": medicine.code,
+                    "generic_name": medicine.generic_name,
+                    "unit": medicine.unit,
+                    "is_otc": medicine.is_otc,
+                    "is_active": medicine.is_active,
+                },
+            )
+        messages.success(request, f"Medicine {medicine.generic_name} ({medicine.code}) created successfully.")
+        return redirect("medicine_list")
+
+    return render(
+        request,
+        "core/store/medicine_form.html",
+        {
+            "form": form,
+            "creating": True,
+        },
+    )
+
+
+@permission_required("core.change_medicine", raise_exception=True)
+def medicine_update(request, pk):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have permission to modify medicines.")
+
+    medicine = get_object_or_404(Medicine, pk=pk)
+    form = MedicineForm(request.POST or None, instance=medicine)
+    if request.method == "POST" and form.is_valid():
+        changed_fields = form.changed_data
+        if changed_fields:
+            with transaction.atomic():
+                medicine = form.save()
+                _audit_medicine_change(
+                    request,
+                    medicine,
+                    "pharmacy.medicine_updated",
+                    {"changed_fields": sorted(changed_fields)},
+                )
+        messages.success(request, f"Medicine {medicine.generic_name} ({medicine.code}) updated successfully.")
+        return redirect("medicine_list")
+
+    return render(
+        request,
+        "core/store/medicine_form.html",
+        {
+            "form": form,
+            "creating": False,
+            "medicine": medicine,
+        },
+    )

@@ -1,0 +1,164 @@
+{% extends "core/base.html" %}
+
+{% block title %}{% if creating %}Add Medicine{% else %}Edit Medicine: {{ medicine.generic_name }}{% endif %} | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="portal-badge" style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+      <span class="badge badge-info">Store portal</span>
+      <span class="badge badge-success">Formulary Item</span>
+    </div>
+    <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-secondary); margin: 0 0 0.25rem 0;">
+      {% if creating %}Add New Medicine{% else %}Edit Medicine: {{ medicine.generic_name }}{% endif %}
+    </h1>
+    <p style="color: var(--color-text-muted); font-size: 0.9375rem; margin: 0;">Configure pharmaceutical codes, packaging units, and prescription classifications.</p>
+  </div>
+  <div>
+    <a href="{% url 'medicine_list' %}" class="btn-stitch-secondary">
+      &larr; Back to Catalog
+    </a>
+  </div>
+</div>
+
+<div class="workspace-split" style="grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+  <section class="stitch-panel">
+    <div class="stitch-panel-header" style="margin-bottom: 1.5rem;">
+      <h2 style="font-size: 1.15rem; font-weight: 700; color: var(--color-secondary); margin: 0;">Medicine Specification</h2>
+      <span class="badge badge-neutral">Required fields marked with *</span>
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert-box alert-danger" style="margin-bottom: 1.5rem; padding: 1rem; border-radius: var(--radius-md); background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;">
+          <strong>Errors:</strong>
+          <ul style="margin: 0.5rem 0 0 1.25rem; padding: 0;">
+            {% for error in form.non_field_errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div>
+          <label for="{{ form.code.id_for_label }}" style="display: block; font-weight: 700; font-size: 0.875rem; margin-bottom: 0.35rem; color: var(--color-secondary);">
+            Medicine Code *
+          </label>
+          {{ form.code }}
+          {% if form.code.errors %}
+            <div style="color: var(--color-danger); font-size: 0.8125rem; margin-top: 0.25rem;">{{ form.code.errors.0 }}</div>
+          {% endif %}
+        </div>
+        <div>
+          <label for="{{ form.barcode.id_for_label }}" style="display: block; font-weight: 700; font-size: 0.875rem; margin-bottom: 0.35rem; color: var(--color-secondary);">
+            Barcode / GTIN
+          </label>
+          {{ form.barcode }}
+          {% if form.barcode.errors %}
+            <div style="color: var(--color-danger); font-size: 0.8125rem; margin-top: 0.25rem;">{{ form.barcode.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div>
+          <label for="{{ form.generic_name.id_for_label }}" style="display: block; font-weight: 700; font-size: 0.875rem; margin-bottom: 0.35rem; color: var(--color-secondary);">
+            Generic Name *
+          </label>
+          {{ form.generic_name }}
+          {% if form.generic_name.errors %}
+            <div style="color: var(--color-danger); font-size: 0.8125rem; margin-top: 0.25rem;">{{ form.generic_name.errors.0 }}</div>
+          {% endif %}
+        </div>
+        <div>
+          <label for="{{ form.brand_name.id_for_label }}" style="display: block; font-weight: 700; font-size: 0.875rem; margin-bottom: 0.35rem; color: var(--color-secondary);">
+            Brand / Trade Name
+          </label>
+          {{ form.brand_name }}
+          {% if form.brand_name.errors %}
+            <div style="color: var(--color-danger); font-size: 0.8125rem; margin-top: 0.25rem;">{{ form.brand_name.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+        <div>
+          <label for="{{ form.strength.id_for_label }}" style="display: block; font-weight: 700; font-size: 0.875rem; margin-bottom: 0.35rem; color: var(--color-secondary);">
+            Strength
+          </label>
+          {{ form.strength }}
+          {% if form.strength.errors %}
+            <div style="color: var(--color-danger); font-size: 0.8125rem; margin-top: 0.25rem;">{{ form.strength.errors.0 }}</div>
+          {% endif %}
+        </div>
+        <div>
+          <label for="{{ form.dosage_form.id_for_label }}" style="display: block; font-weight: 700; font-size: 0.875rem; margin-bottom: 0.35rem; color: var(--color-secondary);">
+            Dosage Form
+          </label>
+          {{ form.dosage_form }}
+          {% if form.dosage_form.errors %}
+            <div style="color: var(--color-danger); font-size: 0.8125rem; margin-top: 0.25rem;">{{ form.dosage_form.errors.0 }}</div>
+          {% endif %}
+        </div>
+        <div>
+          <label for="{{ form.unit.id_for_label }}" style="display: block; font-weight: 700; font-size: 0.875rem; margin-bottom: 0.35rem; color: var(--color-secondary);">
+            Unit *
+          </label>
+          {{ form.unit }}
+          {% if form.unit.errors %}
+            <div style="color: var(--color-danger); font-size: 0.8125rem; margin-top: 0.25rem;">{{ form.unit.errors.0 }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 2rem; margin-bottom: 2rem; padding: 1rem; background: #f8fafc; border-radius: var(--radius-md); border: 1px solid #e2e8f0;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.9375rem; cursor: pointer;">
+          {{ form.is_otc }}
+          <span>Over-the-Counter (OTC)</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.9375rem; cursor: pointer;">
+          {{ form.is_active }}
+          <span>Active in Catalog</span>
+        </label>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <a href="{% url 'medicine_list' %}" class="btn-stitch-secondary">Cancel</a>
+        <button type="submit" class="btn-stitch-primary">
+          {% if creating %}Create Medicine{% else %}Save Changes{% endif %}
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <aside>
+    <div class="safety-alert-card" style="margin-bottom: 1.5rem;">
+      <div class="safety-header">
+        <span class="safety-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+          Historical Continuity
+        </span>
+        <span class="badge badge-info">Master Record</span>
+      </div>
+      <p class="safety-body">
+        Never hard delete pharmaceutical entries. Disabling a medicine (unchecking "Active in Catalog") prevents new prescription orders while strictly preserving historical prescription and dispensing records.
+      </p>
+    </div>
+
+    {% if not creating %}
+      <div class="stitch-panel">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem;">Associated Batches</h3>
+        <p style="font-size: 0.875rem; color: var(--color-text-muted); margin-bottom: 0.75rem;">
+          Total batches on record: <strong>{{ medicine.batches.count }}</strong>
+        </p>
+        <a href="{% url 'pharmacy_prescription_list' %}" class="btn-stitch-secondary" style="font-size: 0.8125rem; padding: 0.35rem 0.75rem;">
+          View in Pharmacy Desk &rarr;
+        </a>
+      </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

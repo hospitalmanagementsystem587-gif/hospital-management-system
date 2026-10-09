@@ -136,6 +136,21 @@ urlpatterns = [
         views.pharmacy_dashboard,
         name="pharmacy_dashboard",
     ),
+    path(
+        "store/medicines/",
+        views.medicine_list,
+        name="medicine_list",
+    ),
+    path(
+        "store/medicines/create/",
+        views.medicine_create,
+        name="medicine_create",
+    ),
+    path(
+        "store/medicines/<int:pk>/edit/",
+        views.medicine_update,
+        name="medicine_update",
+    ),
     path("accounts/", include("django.contrib.auth.urls")),
 ]
 

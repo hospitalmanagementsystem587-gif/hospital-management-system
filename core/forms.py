@@ -18,6 +18,7 @@ from .models import (
     HospitalFaq,
     HospitalSettings,
     InpatientDeposit,
+    Medicine,
     Patient,
     PatientDocument,
     PaymentMethod,
@@ -1035,3 +1036,64 @@ class PriceForm(forms.ModelForm):
         if effective_from and effective_until and effective_until < effective_from:
             raise forms.ValidationError({"effective_until": "Effective until date must be on or after effective from date."})
         return cleaned_data
+
+
+class MedicineForm(forms.ModelForm):
+    class Meta:
+        model = Medicine
+        fields = (
+            "code",
+            "generic_name",
+            "brand_name",
+            "strength",
+            "dosage_form",
+            "unit",
+            "barcode",
+            "is_otc",
+            "is_active",
+        )
+        widgets = {
+            "code": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. MED-PARA-500"}),
+            "generic_name": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. Paracetamol"}),
+            "brand_name": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. Crocin"}),
+            "strength": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. 500 mg"}),
+            "dosage_form": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. Tablet, Syrup, Injection"}),
+            "unit": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. strip, bottle, vial"}),
+            "barcode": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "Optional barcode / GTIN"}),
+            "is_otc": forms.CheckboxInput(attrs={"class": "hms-checkbox"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "hms-checkbox"}),
+        }
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip()
+        if not code:
+            raise forms.ValidationError("Medicine code is required.")
+        qs = Medicine.objects.filter(code__iexact=code)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("A medicine with this code already exists.")
+        return code
+
+    def clean_generic_name(self):
+        name = (self.cleaned_data.get("generic_name") or "").strip()
+        if not name:
+            raise forms.ValidationError("Generic name is required.")
+        return name
+
+    def clean_unit(self):
+        unit = (self.cleaned_data.get("unit") or "").strip()
+        if not unit:
+            raise forms.ValidationError("Dispensing unit is required.")
+        return unit
+
+    def clean_barcode(self):
+        barcode = (self.cleaned_data.get("barcode") or "").strip()
+        if not barcode:
+            return None
+        qs = Medicine.objects.filter(barcode__iexact=barcode)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("A medicine with this barcode already exists.")
+        return barcode
