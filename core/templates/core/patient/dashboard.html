@@ -83,7 +83,10 @@
 <section style="margin-bottom: 2.5rem;">
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
     <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--color-secondary); margin: 0;">Prescriptions &amp; Medications</h2>
-    <span class="badge badge-info">{{ prescriptions|length }} Records</span>
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
+      <a href="{% url 'patient_prescription_history' %}" style="font-size: 0.8125rem; color: #0284c7; text-decoration: none; font-weight: 600;">View All History &rarr;</a>
+      <span class="badge badge-info">{{ prescriptions|length }} Records</span>
+    </div>
   </div>
 
   <table>

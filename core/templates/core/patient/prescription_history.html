@@ -1,0 +1,107 @@
+{% extends "core/base.html" %}
+
+{% block title %}My Prescriptions | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="patient-workspace" style="max-width: 1050px; margin: 2rem auto; padding: 0 1rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <a href="{% url 'patient_dashboard' %}" style="display: inline-flex; align-items: center; gap: 0.5rem; color: #0284c7; text-decoration: none; font-weight: 500; font-size: 0.875rem; margin-bottom: 0.75rem;">
+        &larr; Back to Dashboard
+      </a>
+      <h1 style="font-size: 1.875rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem 0;">Prescription History</h1>
+      <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+        View all issued medications, active dosages, and printable official e-prescriptions.
+      </p>
+    </div>
+    <a href="{% url 'patient_doctor_directory' %}" class="btn-stitch-secondary">
+      Browse Doctors
+    </a>
+  </div>
+
+  <!-- Search form -->
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+    <form method="get" action="." style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 250px;">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search by prescription number, doctor, or medication..." class="appointment-control" style="width: 100%;">
+      </div>
+      <button type="submit" class="btn-stitch-primary" style="padding: 0.6rem 1.25rem;">
+        Search
+      </button>
+      {% if query %}
+        <a href="." class="btn-stitch-secondary" style="padding: 0.6rem 1rem;">
+          Reset
+        </a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Prescription Cards List -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    {% for rx in prescriptions %}
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.75rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+              <span style="font-size: 1.15rem; font-weight: 800; color: #0284c7;">{{ rx.number }}</span>
+              <span class="badge badge-success">Issued</span>
+            </div>
+            <div style="font-size: 0.875rem; color: #64748b;">
+              Prescribed by <strong>Dr. {{ rx.doctor.user.get_full_name|default:rx.doctor.user.username }}</strong>
+              {% if rx.doctor.department %}({{ rx.doctor.department.name }}){% endif %}
+              &bull; Issued on {{ rx.issued_at|date:"d M Y, H:i" }}
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <a href="{% url 'patient_prescription_detail' rx.pk %}" class="btn-stitch-secondary" style="font-size: 0.8125rem; padding: 0.4rem 0.85rem;">
+              View Details
+            </a>
+            <a href="{% url 'patient_portal_prescription_print' rx.pk %}" target="_blank" rel="noopener noreferrer" class="btn-stitch-primary" style="font-size: 0.8125rem; padding: 0.4rem 0.85rem;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+              Print e-Prescription
+            </a>
+          </div>
+        </div>
+
+        <h3 style="font-size: 0.875rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.75rem 0;">
+          Prescribed Medications ({{ rx.items.all|length }})
+        </h3>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          {% for item in rx.items.all %}
+            <div style="background: #f8fafc; border: 1px solid #edf2f7; border-radius: 8px; padding: 0.875rem 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+              <div>
+                <strong style="color: #0f172a; font-size: 0.9375rem;">
+                  {{ item.medicine.generic_name }}
+                  {% if item.medicine.brand_name %}({{ item.medicine.brand_name }}){% endif %}
+                  {{ item.medicine.strength }}
+                </strong>
+                <div style="font-size: 0.8125rem; color: #64748b; margin-top: 0.2rem;">
+                  Regimen: <strong>{{ item.dosage }}</strong> &bull; {{ item.frequency }} &bull; Duration: {{ item.duration }}
+                </div>
+                {% if item.instructions %}
+                  <div style="font-size: 0.8125rem; color: #0284c7; margin-top: 0.2rem;">
+                    Instructions: {{ item.instructions }}
+                  </div>
+                {% endif %}
+              </div>
+              <div style="text-align: right; font-size: 0.875rem; color: #475569;">
+                Qty: <strong>{{ item.quantity }} {{ item.medicine.unit }}</strong>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% empty %}
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 3rem; text-align: center; color: #64748b;">
+        <p style="margin: 0; font-size: 1rem;">No prescriptions recorded for your account.</p>
+        {% if query %}
+          <div style="margin-top: 1rem;">
+            <a href="." class="btn-stitch-secondary">Clear Search</a>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

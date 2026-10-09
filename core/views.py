@@ -2777,6 +2777,8 @@ def patient_portal_prescription_print(request, pk):
         ).prefetch_related("items__medicine"),
         pk=pk,
         patient=patient,
+        status=Prescription.Status.ISSUED,
+        issued_at__isnull=False,
     )
     _audit_clinical_access(
         request,
@@ -2788,6 +2790,71 @@ def patient_portal_prescription_print(request, pk):
         request,
         "core/clinical/prescription_print.html",
         {
+            "prescription": prescription,
+            "items": prescription.items.all(),
+        },
+    )
+
+
+def patient_prescription_history(request):
+    patient = _get_verified_patient_for_request(request)
+
+    prescriptions = (
+        Prescription.objects.filter(
+            patient=patient,
+            status=Prescription.Status.ISSUED,
+            issued_at__isnull=False,
+        )
+        .select_related("doctor__user", "doctor__department", "consultation")
+        .prefetch_related("items__medicine")
+        .order_by("-issued_at", "-id")
+    )
+
+    query = request.GET.get("q", "").strip()
+    if query:
+        prescriptions = prescriptions.filter(
+            Q(number__icontains=query)
+            | Q(doctor__user__first_name__icontains=query)
+            | Q(doctor__user__last_name__icontains=query)
+            | Q(items__medicine__generic_name__icontains=query)
+            | Q(items__medicine__brand_name__icontains=query)
+        ).distinct()
+
+    return render(
+        request,
+        "core/patient/prescription_history.html",
+        {
+            "patient": patient,
+            "prescriptions": prescriptions,
+            "query": query,
+        },
+    )
+
+
+def patient_prescription_detail(request, pk):
+    patient = _get_verified_patient_for_request(request)
+    prescription = get_object_or_404(
+        Prescription.objects.select_related(
+            "patient", "doctor__user", "doctor__department", "consultation"
+        ).prefetch_related("items__medicine"),
+        pk=pk,
+        patient=patient,
+        status=Prescription.Status.ISSUED,
+        issued_at__isnull=False,
+    )
+
+    _audit_clinical_access(
+        request,
+        "clinical.prescription_viewed",
+        "prescription",
+        prescription.pk,
+    )
+
+    return render(
+        request,
+        "core/patient/prescription_detail.html",
+        {
+            "patient": patient,
             "prescription": prescription,
             "items": prescription.items.all(),
         },

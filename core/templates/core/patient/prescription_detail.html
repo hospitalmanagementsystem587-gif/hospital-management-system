@@ -1,0 +1,79 @@
+{% extends "core/base.html" %}
+
+{% block title %}Prescription {{ prescription.number }} | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="patient-workspace" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <a href="{% url 'patient_prescription_history' %}" style="display: inline-flex; align-items: center; gap: 0.5rem; color: #0284c7; text-decoration: none; font-weight: 500; font-size: 0.875rem; margin-bottom: 0.75rem;">
+        &larr; Back to Prescriptions
+      </a>
+      <h1 style="font-size: 1.875rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem 0;">Prescription Details</h1>
+      <p style="color: #64748b; margin: 0; font-size: 0.95rem;">
+        Official e-Prescription reference <strong>{{ prescription.number }}</strong>
+      </p>
+    </div>
+    <a href="{% url 'patient_portal_prescription_print' prescription.pk %}" target="_blank" rel="noopener noreferrer" class="btn-stitch-primary" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+      Print Official Copy
+    </a>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 2rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03); margin-bottom: 2rem;">
+    <!-- Metadata Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1.5rem;">
+      <div>
+        <small style="color: #64748b; text-transform: uppercase; font-size: 0.75rem; font-weight: 600;">Prescription No.</small>
+        <div style="font-size: 1.15rem; font-weight: 800; color: #0284c7; margin-top: 0.25rem;">{{ prescription.number }}</div>
+      </div>
+      <div>
+        <small style="color: #64748b; text-transform: uppercase; font-size: 0.75rem; font-weight: 600;">Issued Date</small>
+        <div style="font-size: 1rem; font-weight: 700; color: #1e293b; margin-top: 0.25rem;">{{ prescription.issued_at|date:"d M Y, H:i" }}</div>
+      </div>
+      <div>
+        <small style="color: #64748b; text-transform: uppercase; font-size: 0.75rem; font-weight: 600;">Prescribing Doctor</small>
+        <div style="font-size: 1rem; font-weight: 700; color: #1e293b; margin-top: 0.25rem;">Dr. {{ prescription.doctor.user.get_full_name|default:prescription.doctor.user.username }}</div>
+        {% if prescription.doctor.department %}<small style="color: #64748b;">{{ prescription.doctor.department.name }}</small>{% endif %}
+      </div>
+      <div>
+        <small style="color: #64748b; text-transform: uppercase; font-size: 0.75rem; font-weight: 600;">Status</small>
+        <div style="margin-top: 0.25rem;"><span class="badge badge-success">Issued &amp; Active</span></div>
+      </div>
+    </div>
+
+    <!-- Medicines Table -->
+    <h3 style="font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 1rem 0;">
+      Medication Regimen
+    </h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Medicine</th>
+          <th>Dosage</th>
+          <th>Frequency</th>
+          <th>Duration</th>
+          <th>Quantity</th>
+          <th>Instructions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+          <tr>
+            <td>
+              <strong style="color: #0f172a;">{{ item.medicine.generic_name }}</strong>
+              {% if item.medicine.brand_name %}<div style="font-size: 0.8125rem; color: #64748b;">{{ item.medicine.brand_name }}</div>{% endif %}
+              {% if item.medicine.strength %}<div style="font-size: 0.75rem; color: #0284c7;">{{ item.medicine.strength }}</div>{% endif %}
+            </td>
+            <td>{{ item.dosage }}</td>
+            <td>{{ item.frequency }}</td>
+            <td>{{ item.duration }}</td>
+            <td>{{ item.quantity|floatformat:"-3" }} {{ item.medicine.unit }}</td>
+            <td>{{ item.instructions|default:"—" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

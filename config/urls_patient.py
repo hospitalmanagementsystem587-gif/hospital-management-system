@@ -15,6 +15,16 @@ urlpatterns = [
         name="patient_portal_prescription_print",
     ),
     path(
+        "prescriptions/",
+        views.patient_prescription_history,
+        name="patient_prescription_history",
+    ),
+    path(
+        "prescriptions/<int:pk>/",
+        views.patient_prescription_detail,
+        name="patient_prescription_detail",
+    ),
+    path(
         "appointments/book/",
         views.patient_appointment_book,
         name="patient_appointment_book",
