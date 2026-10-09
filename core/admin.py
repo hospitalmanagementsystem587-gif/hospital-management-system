@@ -55,6 +55,8 @@ from .models import (
     Ticket,
     TicketAttachment,
     TicketMessage,
+    SLAPolicy,
+    SLALog,
     VisitType,
 )
 
@@ -1022,16 +1024,37 @@ class TicketAdmin(admin.ModelAdmin):
         "category",
         "priority",
         "status",
+        "sla_policy",
+        "sla_due_at",
+        "is_sla_breached",
         "assigned_to",
         "assigned_team",
         "created_by",
         "patient",
         "created_at",
     )
-    list_filter = ("status", "priority", "category", "assigned_team", "created_at")
+    list_filter = ("status", "priority", "category", "assigned_team", "sla_policy", "created_at")
     search_fields = ("number", "title", "description", "patient__full_name", "patient__mrn")
-    readonly_fields = ("number", "created_at", "updated_at", "assigned_at", "resolved_at", "closed_at")
+    readonly_fields = (
+        "number", "created_at", "updated_at", "assigned_at", "resolved_at", "closed_at",
+        "sla_due_at", "sla_paused_at", "sla_total_paused_seconds", "sla_breached_at",
+    )
     inlines = [TicketMessageInline, TicketAttachmentInline]
+
+
+@admin.register(SLAPolicy)
+class SLAPolicyAdmin(admin.ModelAdmin):
+    list_display = ("name", "category", "priority", "department", "resolution_time_minutes", "is_active")
+    list_filter = ("is_active", "category", "priority", "department")
+    search_fields = ("name",)
+
+
+@admin.register(SLALog)
+class SLALogAdmin(admin.ModelAdmin):
+    list_display = ("ticket", "event", "actor", "previous_due_at", "new_due_at", "created_at")
+    list_filter = ("event", "created_at")
+    search_fields = ("ticket__number", "notes", "actor__username")
+    readonly_fields = ("ticket", "actor", "event", "previous_due_at", "new_due_at", "notes", "created_at")
 
 
 @admin.register(TicketMessage)

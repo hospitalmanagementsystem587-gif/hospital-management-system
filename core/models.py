@@ -1924,6 +1924,19 @@ class Ticket(TimestampedModel):
     )
     assigned_at = models.DateTimeField(null=True, blank=True)
 
+    # SLA tracking
+    sla_policy = models.ForeignKey(
+        "SLAPolicy",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tickets",
+    )
+    sla_due_at = models.DateTimeField(null=True, blank=True)
+    sla_paused_at = models.DateTimeField(null=True, blank=True)
+    sla_total_paused_seconds = models.PositiveIntegerField(default=0)
+    sla_breached_at = models.DateTimeField(null=True, blank=True)
+
     # Lifecycle timestamps
     resolved_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
@@ -1937,6 +1950,7 @@ class Ticket(TimestampedModel):
             models.Index(fields=["assigned_to", "status"], name="ticket_assigned_status_idx"),
             models.Index(fields=["assigned_team", "status"], name="ticket_team_status_idx"),
             models.Index(fields=["created_at"], name="ticket_created_at_idx"),
+            models.Index(fields=["sla_due_at", "status"], name="ticket_sla_due_idx"),
         ]
         constraints = [
             models.CheckConstraint(
@@ -1982,7 +1996,61 @@ class Ticket(TimestampedModel):
     def __str__(self):
         return f"{self.number}: {self.title} ({self.get_status_display()})"
 
+    @property
+    def is_sla_breached(self):
+        if not self.sla_due_at:
+            return False
+        if self.sla_breached_at:
+            return True
+        now = timezone.now()
+        check_time = self.resolved_at or now
+        return check_time > self.sla_due_at
+
+    def recalculate_sla(self, *, actor=None, reason="", target_time=None):
+        """
+        Deterministic, timezone-aware SLA target calculation and adjustment.
+        """
+        from datetime import timedelta
+        from django.utils import timezone
+        as_of = target_time or timezone.now()
+        policy = SLAPolicy.find_matching_policy(
+            category=self.category,
+            priority=self.priority,
+            department=self.assigned_team,
+        )
+        old_policy = self.sla_policy
+        old_due_at = self.sla_due_at
+        if not policy:
+            self.sla_policy = None
+            self.sla_due_at = None
+            return
+
+        base_time = self.created_at or as_of
+        target_minutes = policy.resolution_time_minutes
+        self.sla_policy = policy
+        new_due_at = base_time + timedelta(minutes=target_minutes) + timedelta(seconds=self.sla_total_paused_seconds)
+        self.sla_due_at = new_due_at
+
+        # Check breach
+        if self.resolved_at:
+            if self.resolved_at > self.sla_due_at and not self.sla_breached_at:
+                self.sla_breached_at = self.sla_due_at
+        elif as_of > self.sla_due_at and not self.sla_breached_at:
+            self.sla_breached_at = self.sla_due_at
+
+        if (old_policy != self.sla_policy or old_due_at != self.sla_due_at) and self.pk:
+            actor_user = getattr(actor, "user", actor) if actor else None
+            SLALog.objects.create(
+                ticket=self,
+                actor=actor_user if getattr(actor_user, "is_authenticated", False) else None,
+                event=SLALog.Event.TARGET_ADJUSTED if old_due_at is not None else SLALog.Event.POLICY_APPLIED,
+                previous_due_at=old_due_at,
+                new_due_at=self.sla_due_at,
+                notes=reason or f"SLA policy applied: {policy.name} ({target_minutes}m target)",
+            )
+
     def transition_to(self, status, *, actor, reason=""):
+        from datetime import timedelta
         from django.core.exceptions import PermissionDenied, ValidationError
         from django.db import transaction
 
@@ -1992,6 +2060,7 @@ class Ticket(TimestampedModel):
         if status not in self.Status.values:
             raise ValidationError({"status": "Unknown ticket status."})
 
+        now = timezone.now()
         with transaction.atomic():
             locked = Ticket.objects.select_for_update().get(pk=self.pk)
             previous = locked.status
@@ -2001,8 +2070,59 @@ class Ticket(TimestampedModel):
                 raise ValidationError(
                     {"status": f"Tickets cannot transition from {previous} to {status}."}
                 )
+
+            # SLA pause/resume handling
+            # Waiting on requester pauses the SLA clock
+            if status == self.Status.WAITING_ON_REQUESTER and not locked.sla_paused_at:
+                locked.sla_paused_at = now
+                SLALog.objects.create(
+                    ticket=locked,
+                    actor=actor_user,
+                    event=SLALog.Event.CLOCK_PAUSED,
+                    notes=f"SLA clock paused due to status transition to {status}." + (f" Reason: {reason}" if reason else ""),
+                )
+            elif previous == self.Status.WAITING_ON_REQUESTER and locked.sla_paused_at:
+                paused_duration = int((now - locked.sla_paused_at).total_seconds())
+                if paused_duration > 0:
+                    locked.sla_total_paused_seconds += paused_duration
+                    if locked.sla_due_at:
+                        old_due = locked.sla_due_at
+                        locked.sla_due_at = locked.sla_due_at + timedelta(seconds=paused_duration)
+                        SLALog.objects.create(
+                            ticket=locked,
+                            actor=actor_user,
+                            event=SLALog.Event.CLOCK_RESUMED,
+                            previous_due_at=old_due,
+                            new_due_at=locked.sla_due_at,
+                            notes=f"SLA clock resumed. Paused for {paused_duration}s. New due time set.",
+                        )
+                locked.sla_paused_at = None
+
             locked.status = status
-            locked.save(update_fields=["status", "resolved_at", "closed_at", "updated_at"])
+            if status in [self.Status.RESOLVED, self.Status.CLOSED] and not locked.resolved_at:
+                locked.resolved_at = now
+                if locked.sla_due_at and locked.resolved_at > locked.sla_due_at and not locked.sla_breached_at:
+                    locked.sla_breached_at = locked.sla_due_at
+                    SLALog.objects.create(
+                        ticket=locked,
+                        actor=actor_user,
+                        event=SLALog.Event.BREACHED,
+                        notes=f"Ticket breached SLA upon resolution at {locked.resolved_at}.",
+                    )
+            elif status not in [self.Status.RESOLVED, self.Status.CLOSED]:
+                locked.resolved_at = None
+
+            if status == self.Status.CLOSED and not locked.closed_at:
+                locked.closed_at = now
+            elif status != self.Status.CLOSED:
+                locked.closed_at = None
+
+            locked.save(
+                update_fields=[
+                    "status", "resolved_at", "closed_at", "updated_at",
+                    "sla_paused_at", "sla_total_paused_seconds", "sla_due_at", "sla_breached_at",
+                ]
+            )
             note = f"Status changed from {previous} to {status}."
             if reason:
                 note += f" Reason: {reason.strip()}"
@@ -2012,6 +2132,10 @@ class Ticket(TimestampedModel):
             self.status = locked.status
             self.resolved_at = locked.resolved_at
             self.closed_at = locked.closed_at
+            self.sla_paused_at = locked.sla_paused_at
+            self.sla_total_paused_seconds = locked.sla_total_paused_seconds
+            self.sla_due_at = locked.sla_due_at
+            self.sla_breached_at = locked.sla_breached_at
             return locked
 
     def assign(self, staff_profile=None, team=None, actor=None, reason=""):
@@ -2042,7 +2166,17 @@ class Ticket(TimestampedModel):
             locked.assigned_to = staff_profile
             locked.assigned_team = team
             locked.assigned_at = now if (staff_profile or team) else None
-            locked.save(update_fields=["assigned_to", "assigned_team", "assigned_at", "updated_at"])
+
+            # Re-evaluate SLA policy if team changed
+            if prev_team != team:
+                locked.recalculate_sla(actor=actor_user, reason=f"Department changed to {team}")
+
+            locked.save(
+                update_fields=[
+                    "assigned_to", "assigned_team", "assigned_at", "updated_at",
+                    "sla_policy", "sla_due_at", "sla_breached_at",
+                ]
+            )
 
             # Create an internal ticket audit note if actor provided
             if actor:
@@ -2062,6 +2196,9 @@ class Ticket(TimestampedModel):
             self.assigned_to = locked.assigned_to
             self.assigned_team = locked.assigned_team
             self.assigned_at = locked.assigned_at
+            self.sla_policy = locked.sla_policy
+            self.sla_due_at = locked.sla_due_at
+            self.sla_breached_at = locked.sla_breached_at
             return locked
 
     def save(self, *args, **kwargs):
@@ -2089,7 +2226,124 @@ class Ticket(TimestampedModel):
         elif self.status != self.Status.CLOSED:
             self.closed_at = None
 
+        # Calculate initial SLA target on creation if not set
+        if not self.sla_due_at and not self.resolved_at:
+            self.recalculate_sla(target_time=self.created_at or now)
+
         super().save(*args, **kwargs)
+
+
+class SLAPolicy(TimestampedModel):
+    name = models.CharField(max_length=120)
+    category = models.CharField(
+        max_length=32,
+        choices=Ticket.Category.choices,
+        null=True,
+        blank=True,
+        help_text="Null matches all categories.",
+    )
+    priority = models.CharField(
+        max_length=16,
+        choices=Ticket.Priority.choices,
+        null=True,
+        blank=True,
+        help_text="Null matches all priorities.",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="sla_policies",
+        help_text="Null matches all departments.",
+    )
+    resolution_time_minutes = models.PositiveIntegerField(
+        help_text="Target resolution time in minutes."
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-is_active", "name"]
+        indexes = [
+            models.Index(fields=["is_active", "priority", "category"], name="sla_active_prio_cat_idx"),
+        ]
+
+    def __str__(self):
+        cat = self.get_category_display() if self.category else "All Categories"
+        prio = self.get_priority_display() if self.priority else "All Priorities"
+        return f"{self.name} ({prio} - {cat}: {self.resolution_time_minutes}m)"
+
+    @classmethod
+    def find_matching_policy(cls, *, category=None, priority=None, department=None):
+        """
+        Finds the most specific active policy for the given ticket attributes.
+        Specificity ranking:
+        1. Exact (department, category, priority)
+        2. (category, priority)
+        3. (department, priority)
+        4. (priority)
+        5. (category)
+        6. Default active policy with no filters
+        """
+        active_policies = cls.objects.filter(is_active=True)
+        # 1. Dept + Cat + Priority
+        p = active_policies.filter(department=department, category=category, priority=priority).first()
+        if p:
+            return p
+        # 2. Cat + Priority
+        p = active_policies.filter(department__isnull=True, category=category, priority=priority).first()
+        if p:
+            return p
+        # 3. Dept + Priority
+        p = active_policies.filter(department=department, category__isnull=True, priority=priority).first()
+        if p:
+            return p
+        # 4. Priority only
+        p = active_policies.filter(department__isnull=True, category__isnull=True, priority=priority).first()
+        if p:
+            return p
+        # 5. Category only
+        p = active_policies.filter(department__isnull=True, category=category, priority__isnull=True).first()
+        if p:
+            return p
+        # 6. Fallback general active policy
+        return active_policies.filter(department__isnull=True, category__isnull=True, priority__isnull=True).first()
+
+
+class SLALog(TimestampedModel):
+    class Event(models.TextChoices):
+        POLICY_APPLIED = "policy_applied", "Policy Applied"
+        TARGET_ADJUSTED = "target_adjusted", "Target Adjusted"
+        CLOCK_PAUSED = "clock_paused", "Clock Paused"
+        CLOCK_RESUMED = "clock_resumed", "Clock Resumed"
+        BREACHED = "breached", "Breached"
+
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="sla_logs",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sla_logs",
+    )
+    event = models.CharField(max_length=32, choices=Event.choices)
+    previous_due_at = models.DateTimeField(null=True, blank=True)
+    new_due_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["ticket", "event"], name="sla_log_ticket_event_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.ticket.number} - {self.get_event_display()} at {self.created_at}"
+
 
 
 class TicketMessage(TimestampedModel):
