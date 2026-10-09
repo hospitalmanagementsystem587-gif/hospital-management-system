@@ -161,6 +161,21 @@ urlpatterns = [
         views.batch_detail,
         name="batch_detail",
     ),
+    path(
+        "store/suppliers/",
+        views.supplier_list,
+        name="supplier_list",
+    ),
+    path(
+        "store/suppliers/create/",
+        views.supplier_create,
+        name="supplier_create",
+    ),
+    path(
+        "store/suppliers/<int:pk>/edit/",
+        views.supplier_update,
+        name="supplier_update",
+    ),
     path("accounts/", include("django.contrib.auth.urls")),
 ]
 

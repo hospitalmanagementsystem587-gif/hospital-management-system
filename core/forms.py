@@ -29,6 +29,7 @@ from .models import (
     Specialty,
     StaffProfile,
     DoctorSchedule,
+    Supplier,
     VisitType,
 )
 from .services.documents import inspect_patient_document_upload
@@ -1097,3 +1098,41 @@ class MedicineForm(forms.ModelForm):
         if qs.exists():
             raise forms.ValidationError("A medicine with this barcode already exists.")
         return barcode
+
+
+class SupplierForm(forms.ModelForm):
+    class Meta:
+        model = Supplier
+        fields = (
+            "code",
+            "name",
+            "phone",
+            "email",
+            "address",
+            "is_active",
+        )
+        widgets = {
+            "code": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. SUP-MED-01"}),
+            "name": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. Acme Pharmaceuticals"}),
+            "phone": forms.TextInput(attrs={"class": "clinical-input", "placeholder": "e.g. +91 9876543210"}),
+            "email": forms.EmailInput(attrs={"class": "clinical-input", "placeholder": "e.g. orders@acmepharma.com"}),
+            "address": forms.Textarea(attrs={"class": "clinical-input", "rows": 3, "placeholder": "Billing and warehouse address"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "hms-checkbox"}),
+        }
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip()
+        if not code:
+            raise forms.ValidationError("Supplier code is required.")
+        qs = Supplier.objects.filter(code__iexact=code)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("A supplier with this code already exists.")
+        return code
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if not name:
+            raise forms.ValidationError("Supplier name is required.")
+        return name

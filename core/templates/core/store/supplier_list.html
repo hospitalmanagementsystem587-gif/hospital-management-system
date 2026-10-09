@@ -1,0 +1,128 @@
+{% extends "core/base.html" %}
+
+{% block title %}Supplier Directory | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="portal-badge" style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+      <span class="badge badge-info">Store portal</span>
+      <span class="badge badge-success">Procurement &amp; Supply</span>
+    </div>
+    <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-secondary); margin: 0 0 0.25rem 0;">Supplier Directory</h1>
+    <p style="color: var(--color-text-muted); font-size: 0.9375rem; margin: 0;">Manage pharmaceutical vendors, contact coordinates, procurement history, and vendor active status.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    {% if can_manage and perms.core.add_supplier %}
+      <a href="{% url 'supplier_create' %}" class="btn-stitch-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Add Supplier
+      </a>
+    {% endif %}
+    <a href="{% url 'pharmacy_dashboard' %}" class="btn-stitch-secondary">
+      &larr; Store Dashboard
+    </a>
+  </div>
+</div>
+
+<!-- Search and Filter Form -->
+<section class="patient-search-card" aria-labelledby="supplier-search-title" style="margin-bottom: 2rem;">
+  <form method="get" role="search" class="patient-search-form">
+    <div class="patient-search-input" style="flex: 1;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="supplier-query" name="q" value="{{ query }}" type="search" placeholder="Search by supplier name, code, phone, or email..." autocomplete="off" class="clinical-input">
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <select name="status" class="clinical-input" style="width: auto; min-width: 140px;">
+        <option value="all" {% if status_filter == "all" %}selected{% endif %}>All status</option>
+        <option value="active" {% if status_filter == "active" %}selected{% endif %}>Active only</option>
+        <option value="inactive" {% if status_filter == "inactive" %}selected{% endif %}>Inactive only</option>
+      </select>
+      <button type="submit" class="btn-stitch-primary">Filter</button>
+      {% if query or status_filter != "all" %}
+        <a href="{% url 'supplier_list' %}" class="btn-stitch-secondary">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+</section>
+
+<!-- Supplier Directory Table -->
+<section class="stitch-panel" aria-labelledby="supplier-list-heading">
+  <div class="stitch-panel-header" style="margin-bottom: 1rem;">
+    <h2 id="supplier-list-heading" style="font-size: 1.15rem; font-weight: 700; color: var(--color-secondary); margin: 0;">Registered Suppliers</h2>
+    <span class="badge badge-info">{{ page_obj.paginator.count }} supplier{{ page_obj.paginator.count|pluralize }}</span>
+  </div>
+
+  <div class="patient-table-scroll">
+    <table class="patient-directory-table">
+      <thead>
+        <tr>
+          <th scope="col">Code</th>
+          <th scope="col">Vendor Name</th>
+          <th scope="col">Contact Coordinates</th>
+          <th scope="col">Address</th>
+          <th scope="col">Intake Receipts</th>
+          <th scope="col">Status</th>
+          <th scope="col" style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for supplier in suppliers %}
+          <tr>
+            <td>
+              <code style="font-weight: 700; color: var(--color-primary);">{{ supplier.code }}</code>
+            </td>
+            <td>
+              <strong style="color: var(--color-secondary); font-size: 0.9375rem;">{{ supplier.name }}</strong>
+            </td>
+            <td>
+              {% if supplier.phone %}
+                <div><span style="font-size: 0.8125rem;">📞 {{ supplier.phone }}</span></div>
+              {% endif %}
+              {% if supplier.email %}
+                <div style="font-size: 0.8125rem; color: var(--color-text-muted);">✉️ {{ supplier.email }}</div>
+              {% endif %}
+              {% if not supplier.phone and not supplier.email %}
+                <span style="color: var(--color-text-muted);">-</span>
+              {% endif %}
+            </td>
+            <td>
+              <span style="font-size: 0.8125rem; color: var(--color-text-muted);">{{ supplier.address|default:"-"|truncatewords:8 }}</span>
+            </td>
+            <td>
+              <span class="badge badge-neutral">{{ supplier.receipt_count }} receipt{{ supplier.receipt_count|pluralize }}</span>
+            </td>
+            <td>
+              {% if supplier.is_active %}
+                <span class="badge badge-success">Active</span>
+              {% else %}
+                <span class="badge badge-danger">Inactive</span>
+              {% endif %}
+            </td>
+            <td style="text-align: right;">
+              {% if can_manage and perms.core.change_supplier %}
+                <a href="{% url 'supplier_update' supplier.pk %}" class="btn-stitch-secondary" style="padding: 0.25rem 0.65rem; font-size: 0.8125rem; min-height: 30px;">
+                  Edit
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 3rem 1rem; color: var(--color-text-muted);">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.5rem; opacity: 0.6;"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+              <div>No suppliers found matching the specified criteria.</div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+    <div style="margin-top: 1.5rem;">
+      {% include "core/components/pagination.html" %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

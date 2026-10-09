@@ -12,7 +12,7 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -32,6 +32,7 @@ from .forms import (
     PatientDocumentForm,
     PatientForm,
     PrescriptionItemFormSet,
+    SupplierForm,
     appointment_slot_conflicts,
 )
 from .models import (
@@ -2320,5 +2321,140 @@ def batch_detail(request, pk):
             "movements": movements,
             "today": timezone.localdate(),
             "can_adjust": can_adjust,
+        },
+    )
+
+
+def _audit_supplier_change(request, supplier, action, details):
+    actor = StaffProfile.objects.filter(user=request.user).first()
+    AuditEvent.objects.create(
+        actor=actor,
+        action=action,
+        target_type="supplier",
+        target_id=str(supplier.pk),
+        details=details,
+    )
+
+
+@permission_required("core.view_supplier", raise_exception=True)
+def supplier_list(request):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have access to suppliers.")
+
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "all").strip()
+
+    suppliers = (
+        Supplier.objects.annotate(receipt_count=Count("stockreceipt"))
+        .all()
+        .order_by("name", "code")
+    )
+
+    if query:
+        suppliers = suppliers.filter(
+            Q(code__icontains=query)
+            | Q(name__icontains=query)
+            | Q(phone__icontains=query)
+            | Q(email__icontains=query)
+        )
+
+    if status_filter == "active":
+        suppliers = suppliers.filter(is_active=True)
+    elif status_filter == "inactive":
+        suppliers = suppliers.filter(is_active=False)
+
+    paginator = Paginator(suppliers, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    can_manage = (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    )
+
+    return render(
+        request,
+        "core/store/supplier_list.html",
+        {
+            "page_obj": page_obj,
+            "suppliers": page_obj,
+            "query": query,
+            "status_filter": status_filter,
+            "can_manage": can_manage,
+        },
+    )
+
+
+@permission_required("core.add_supplier", raise_exception=True)
+def supplier_create(request):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have permission to add suppliers.")
+
+    form = SupplierForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            supplier = form.save()
+            _audit_supplier_change(
+                request,
+                supplier,
+                "pharmacy.supplier_created",
+                {
+                    "code": supplier.code,
+                    "name": supplier.name,
+                    "phone": supplier.phone,
+                    "email": supplier.email,
+                    "is_active": supplier.is_active,
+                },
+            )
+        messages.success(request, f"Supplier {supplier.name} ({supplier.code}) created successfully.")
+        return redirect("supplier_list")
+
+    return render(
+        request,
+        "core/store/supplier_form.html",
+        {
+            "form": form,
+            "creating": True,
+        },
+    )
+
+
+@permission_required("core.change_supplier", raise_exception=True)
+def supplier_update(request, pk):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have permission to modify suppliers.")
+
+    supplier = get_object_or_404(Supplier, pk=pk)
+    form = SupplierForm(request.POST or None, instance=supplier)
+    if request.method == "POST" and form.is_valid():
+        changed_fields = form.changed_data
+        if changed_fields:
+            with transaction.atomic():
+                supplier = form.save()
+                _audit_supplier_change(
+                    request,
+                    supplier,
+                    "pharmacy.supplier_updated",
+                    {"changed_fields": sorted(changed_fields)},
+                )
+        messages.success(request, f"Supplier {supplier.name} ({supplier.code}) updated successfully.")
+        return redirect("supplier_list")
+
+    return render(
+        request,
+        "core/store/supplier_form.html",
+        {
+            "form": form,
+            "creating": False,
+            "supplier": supplier,
         },
     )
