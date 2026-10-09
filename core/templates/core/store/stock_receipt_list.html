@@ -1,0 +1,216 @@
+{% extends "core/base.html" %}
+
+{% block title %}Stock Receiving &amp; Receipts | {{ hospital.name|default:"Vedant Hospital" }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="portal-badge" style="display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+      <span class="badge badge-info">Store portal</span>
+      <span class="badge badge-success">Procurement Intake</span>
+    </div>
+    <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-secondary); margin: 0 0 0.25rem 0;">Stock Receiving &amp; Receipts</h1>
+    <p style="color: var(--color-text-muted); font-size: 0.9375rem; margin: 0;">Record verified vendor deliveries, register new FEFO medicine batches, and audit intake history.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <a href="{% url 'batch_list' %}" class="btn-stitch-secondary">
+      Inventory &amp; Batches
+    </a>
+    <a href="{% url 'pharmacy_dashboard' %}" class="btn-stitch-secondary">
+      &larr; Store Dashboard
+    </a>
+  </div>
+</div>
+
+{% if can_intake %}
+  <!-- New Stock Intake Intake Panel -->
+  <section class="stitch-panel" aria-labelledby="intake-form-heading" style="margin-bottom: 2rem;">
+    <div class="stitch-panel-header" style="margin-bottom: 1rem;">
+      <h2 id="intake-form-heading" style="font-size: 1.15rem; font-weight: 700; color: var(--color-secondary); margin: 0;">Receive Stock Delivery (New Receipt)</h2>
+      <span class="badge badge-success">Atomic Batch Intake</span>
+    </div>
+
+    <form method="post" action="{% url 'stock_receipt_create' %}" style="display: flex; flex-direction: column; gap: 1rem;">
+      {% csrf_token %}
+      <input type="hidden" name="request_key" value="{{ receipt_request_key }}">
+      <input type="hidden" name="next" value="{% url 'stock_receipt_list' %}">
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+        <div>
+          <label style="display: block; font-weight: 700; font-size: 0.8125rem; color: var(--color-secondary); margin-bottom: 0.35rem;">
+            Supplier *
+          </label>
+          <select name="supplier" required class="clinical-input">
+            <option value="">-- Select Active Supplier --</option>
+            {% for s in active_suppliers %}
+              <option value="{{ s.pk }}">{{ s.name }} ({{ s.code }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; font-weight: 700; font-size: 0.8125rem; color: var(--color-secondary); margin-bottom: 0.35rem;">
+            Supplier Invoice / Delivery Ref #
+          </label>
+          <input type="text" name="supplier_reference" placeholder="e.g. INV-2026-9812" class="clinical-input">
+        </div>
+
+        <div>
+          <label style="display: block; font-weight: 700; font-size: 0.8125rem; color: var(--color-secondary); margin-bottom: 0.35rem;">
+            Medicine Form *
+          </label>
+          <select name="medicine" required class="clinical-input">
+            <option value="">-- Select Formulary Drug --</option>
+            {% for m in active_medicines %}
+              <option value="{{ m.pk }}">{{ m.generic_name }} {% if m.brand_name %}({{ m.brand_name }}){% endif %} - {{ m.code }} [{{ m.unit }}]</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem;">
+        <div>
+          <label style="display: block; font-weight: 700; font-size: 0.8125rem; color: var(--color-secondary); margin-bottom: 0.35rem;">
+            Batch Number *
+          </label>
+          <input type="text" name="batch_number" required placeholder="e.g. B-9842" class="clinical-input">
+        </div>
+
+        <div>
+          <label style="display: block; font-weight: 700; font-size: 0.8125rem; color: var(--color-secondary); margin-bottom: 0.35rem;">
+            Expiry Date (FEFO) *
+          </label>
+          <input type="date" name="expiry_date" required class="clinical-input">
+        </div>
+
+        <div>
+          <label style="display: block; font-weight: 700; font-size: 0.8125rem; color: var(--color-secondary); margin-bottom: 0.35rem;">
+            Quantity Received *
+          </label>
+          <input type="number" name="quantity_received" step="0.001" min="0.001" required placeholder="100" class="clinical-input">
+        </div>
+
+        <div>
+          <label style="display: block; font-weight: 700; font-size: 0.8125rem; color: var(--color-secondary); margin-bottom: 0.35rem;">
+            Purchase Cost (₹) *
+          </label>
+          <input type="number" name="purchase_price" step="0.01" min="0" required placeholder="5.00" class="clinical-input">
+        </div>
+
+        <div>
+          <label style="display: block; font-weight: 700; font-size: 0.8125rem; color: var(--color-secondary); margin-bottom: 0.35rem;">
+            Retail / Sale Price (₹) *
+          </label>
+          <input type="number" name="sale_price" step="0.01" min="0" required placeholder="8.50" class="clinical-input">
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+        <button type="submit" class="btn-stitch-primary" style="padding: 0.65rem 1.5rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Record Stock Intake
+        </button>
+      </div>
+    </form>
+  </section>
+{% endif %}
+
+<!-- Search and Filter Section -->
+<section class="patient-search-card" aria-labelledby="receipt-search-title" style="margin-bottom: 2rem;">
+  <form method="get" role="search" class="patient-search-form">
+    <div class="patient-search-input" style="flex: 1;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="receipt-query" name="q" value="{{ query }}" type="search" placeholder="Search by receipt #, supplier ref, vendor name, batch #, or medicine..." autocomplete="off" class="clinical-input">
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+      <select name="supplier" class="clinical-input" style="width: auto; min-width: 160px;">
+        <option value="">All Suppliers</option>
+        {% for s in active_suppliers %}
+          <option value="{{ s.pk }}" {% if supplier_filter == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn-stitch-primary">Filter</button>
+      {% if query or supplier_filter %}
+        <a href="{% url 'stock_receipt_list' %}" class="btn-stitch-secondary">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+</section>
+
+<!-- Receipt History Table -->
+<section class="stitch-panel" aria-labelledby="receipt-list-heading">
+  <div class="stitch-panel-header" style="margin-bottom: 1rem;">
+    <h2 id="receipt-list-heading" style="font-size: 1.15rem; font-weight: 700; color: var(--color-secondary); margin: 0;">Stock Receipts History</h2>
+    <span class="badge badge-info">{{ page_obj.paginator.count }} delivery receipt{{ page_obj.paginator.count|pluralize }}</span>
+  </div>
+
+  <div class="patient-table-scroll">
+    <table class="patient-directory-table">
+      <thead>
+        <tr>
+          <th scope="col">Receipt #</th>
+          <th scope="col">Supplier</th>
+          <th scope="col">Received At</th>
+          <th scope="col">Intake Batches</th>
+          <th scope="col">Received By</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for receipt in receipts %}
+          <tr>
+            <td>
+              <code style="font-weight: 700; color: var(--color-primary);">{{ receipt.number }}</code>
+              {% if receipt.supplier_reference %}
+                <div style="font-size: 0.6875rem; color: var(--color-text-muted);">Ref: {{ receipt.supplier_reference }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <strong style="color: var(--color-secondary); font-size: 0.9375rem;">{{ receipt.supplier.name }}</strong>
+              <div style="font-size: 0.8125rem; color: var(--color-text-muted);">{{ receipt.supplier.code }}</div>
+            </td>
+            <td>
+              <span>{{ receipt.received_at|date:"M d, Y H:i" }}</span>
+            </td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                {% for batch in receipt.batches.all %}
+                  <div style="font-size: 0.8125rem;">
+                    <a href="{% url 'batch_detail' batch.pk %}" style="font-weight: 700; color: var(--color-primary); text-decoration: none;">
+                      <code>{{ batch.batch_number }}</code>
+                    </a>
+                    &mdash; {{ batch.medicine.generic_name }} ({{ batch.quantity_received }} {{ batch.medicine.unit }})
+                    <span style="color: var(--color-text-muted);">@ ₹{{ batch.purchase_price }}</span>
+                  </div>
+                {% empty %}
+                  <span style="color: var(--color-text-muted); font-size: 0.8125rem;">No batches recorded</span>
+                {% endfor %}
+              </div>
+            </td>
+            <td>
+              {% if receipt.received_by %}
+                <span>{{ receipt.received_by.user.get_full_name|default:receipt.received_by.user.username }}</span>
+                <div style="font-size: 0.6875rem; color: var(--color-text-muted);">{{ receipt.received_by.employee_id }}</div>
+              {% else %}
+                <span style="color: var(--color-text-muted);">-</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" style="text-align: center; padding: 3rem 1rem; color: var(--color-text-muted);">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.5rem; opacity: 0.6;"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+              <div>No stock receipts found matching the specified criteria.</div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+    <div style="margin-top: 1.5rem;">
+      {% include "core/components/pagination.html" %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

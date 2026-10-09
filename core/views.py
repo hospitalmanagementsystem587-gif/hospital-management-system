@@ -1232,7 +1232,11 @@ def stock_receipt_create(request):
         return HttpResponseBadRequest("A valid request key is required.")
 
     supplier = get_object_or_404(Supplier, pk=request.POST.get("supplier"))
+    if not supplier.is_active:
+        return HttpResponseBadRequest("Cannot receive stock from an inactive supplier.")
     medicine = get_object_or_404(Medicine, pk=request.POST.get("medicine"))
+    if not medicine.is_active:
+        return HttpResponseBadRequest("Cannot receive stock for an inactive medicine.")
     try:
         quantity_received = Decimal(request.POST.get("quantity_received", "0"))
         purchase_price = Decimal(request.POST.get("purchase_price", "0.00"))
@@ -1248,8 +1252,9 @@ def stock_receipt_create(request):
         or sale_price < 0
     ):
         return HttpResponseBadRequest("Receipt amounts are outside the valid range.")
+    redirect_url = request.POST.get("next") or "stock_receipt_list"
     if StockMovement.objects.filter(request_key=request_key).exists():
-        return redirect("pharmacy_prescription_list")
+        return redirect(redirect_url)
 
     if quantity_received <= 0:
         return HttpResponseBadRequest("Quantity received must be positive.")
@@ -1258,13 +1263,17 @@ def stock_receipt_create(request):
     if not expiry_date:
         return HttpResponseBadRequest("A valid expiry date is required.")
 
+    actor_profile = StaffProfile.objects.filter(user=request.user).first()
+
     with transaction.atomic():
+        if StockMovement.objects.filter(request_key=request_key).exists():
+            return redirect(redirect_url)
         receipt = StockReceipt.objects.create(
             number=next_number("STOCK_RECEIPT"),
             supplier=supplier,
             supplier_reference=request.POST.get("supplier_reference", "").strip(),
             received_at=timezone.now(),
-            received_by=StaffProfile.objects.get(user=request.user),
+            received_by=actor_profile,
         )
         batch = MedicineBatch.objects.create(
             medicine=medicine,
@@ -1286,9 +1295,28 @@ def stock_receipt_create(request):
             reference_type="stock_receipt",
             reference_id=str(receipt.pk),
             request_key=request_key,
-            actor=StaffProfile.objects.get(user=request.user),
+            actor=actor_profile,
         )
-    return redirect("pharmacy_prescription_list")
+        AuditEvent.objects.create(
+            actor=actor_profile,
+            action="stock.received",
+            target_type="stockreceipt",
+            target_id=str(receipt.pk),
+            details={
+                "receipt_number": receipt.number,
+                "supplier_id": supplier.pk,
+                "supplier_code": supplier.code,
+                "batch_id": batch.pk,
+                "batch_number": batch.batch_number,
+                "quantity_received": str(quantity_received),
+                "request_key": str(request_key),
+            },
+        )
+    messages.success(
+        request,
+        f"Stock intake recorded for {medicine.generic_name} ({batch.batch_number}) under receipt {receipt.number}.",
+    )
+    return redirect(redirect_url)
 
 
 @permission_required("core.add_pharmacysale", raise_exception=True)
@@ -2456,5 +2484,65 @@ def supplier_update(request, pk):
             "form": form,
             "creating": False,
             "supplier": supplier,
+        },
+    )
+
+
+@permission_required("core.view_stockreceipt", raise_exception=True)
+def stock_receipt_list(request):
+    if not (
+        request.user.is_superuser
+        or request.user.groups.filter(name__in=["Pharmacy", "Administrator"]).exists()
+    ):
+        raise PermissionDenied("You do not have access to stock receipts.")
+
+    query = request.GET.get("q", "").strip()
+    supplier_filter = request.GET.get("supplier", "").strip()
+
+    receipts = (
+        StockReceipt.objects.select_related("supplier", "received_by", "received_by__user")
+        .prefetch_related("batches__medicine")
+        .all()
+        .order_by("-received_at", "-id")
+    )
+
+    if query:
+        receipts = receipts.filter(
+            Q(number__icontains=query)
+            | Q(supplier_reference__icontains=query)
+            | Q(supplier__name__icontains=query)
+            | Q(supplier__code__icontains=query)
+            | Q(batches__batch_number__icontains=query)
+            | Q(batches__medicine__generic_name__icontains=query)
+            | Q(batches__medicine__code__icontains=query)
+        ).distinct()
+
+    if supplier_filter:
+        receipts = receipts.filter(supplier_id=supplier_filter)
+
+    paginator = Paginator(receipts, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    can_intake = (
+        request.user.is_superuser
+        or request.user.groups.filter(name="Pharmacy").exists()
+    ) and request.user.has_perm("core.add_stockreceipt")
+
+    active_suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    active_medicines = Medicine.objects.filter(is_active=True).order_by("generic_name")
+
+    return render(
+        request,
+        "core/store/stock_receipt_list.html",
+        {
+            "page_obj": page_obj,
+            "receipts": page_obj,
+            "query": query,
+            "supplier_filter": supplier_filter,
+            "can_intake": can_intake,
+            "active_suppliers": active_suppliers,
+            "active_medicines": active_medicines,
+            "receipt_request_key": uuid.uuid4(),
         },
     )

@@ -168,6 +168,7 @@ ROLE_PERMISSIONS = {
         "core.add_medicine",
         "core.change_medicine",
         "core.view_medicinebatch",
+        "core.view_stockreceipt",
         "core.view_patientdocument",
         "core.add_patientdocument",
         "core.change_patientdocument",

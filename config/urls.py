@@ -176,6 +176,11 @@ urlpatterns = [
         views.supplier_update,
         name="supplier_update",
     ),
+    path(
+        "store/receipts/",
+        views.stock_receipt_list,
+        name="stock_receipt_list",
+    ),
     path("accounts/", include("django.contrib.auth.urls")),
 ]
 
