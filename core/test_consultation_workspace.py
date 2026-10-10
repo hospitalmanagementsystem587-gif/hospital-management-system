@@ -1,9 +1,7 @@
 from datetime import timedelta
-from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -14,7 +12,6 @@ from core.models import (
     Medicine,
     NumberSequence,
     Patient,
-    Prescription,
     StaffProfile,
     VisitType,
 )

@@ -1,9 +1,8 @@
 from django.contrib.auth import get_user_model
-from django.core.files.base import ContentFile
 from django.test import TestCase, override_settings
 
 from core.models import Patient, PatientAccount, Ticket, TicketAttachment, TicketMessage
-from core.services.ticketing import create_patient_ticket, patient_tickets_queryset
+from core.services.ticketing import create_patient_ticket
 
 User = get_user_model()
 

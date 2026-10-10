@@ -1,5 +1,4 @@
 from decimal import Decimal
-from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
@@ -21,8 +20,6 @@ from core.roles import configure_role_permissions
 from core.services.ticketing import (
     create_patient_ticket,
     create_staff_ticket,
-    staff_tickets_queryset,
-    can_access_ticket,
 )
 
 User = get_user_model()

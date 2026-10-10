@@ -12,8 +12,6 @@ from core.models import (
     AuditEvent,
     Dispensing,
     DispensingLine,
-    Invoice,
-    InvoiceLine,
     Medicine,
     MedicineBatch,
     NumberSequence,

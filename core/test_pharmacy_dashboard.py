@@ -14,7 +14,6 @@ from core.models import (
     Patient,
     PharmacySale,
     Prescription,
-    PrescriptionItem,
     StaffProfile,
     StockReceipt,
     Supplier,

@@ -12,7 +12,8 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q, Sum, Subquery, OuterRef
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -75,8 +76,6 @@ from .models import (
     StockReceipt,
     Supplier,
     Ticket,
-    TicketAttachment,
-    TicketMessage,
     Ward,
 )
 from .services.numbering import next_number
@@ -421,7 +420,17 @@ def invoice_list(request):
         or not StaffProfile.objects.filter(user=request.user).exists()
     ):
         raise PermissionDenied
-    invoices = Invoice.objects.select_related("patient").order_by("-created_at")
+
+    payments_sum = Payment.objects.filter(invoice=OuterRef("pk")).values("invoice").annotate(total=Sum("amount")).values("total")
+    refunds_sum = Refund.objects.filter(payment__invoice=OuterRef("pk"), status=Refund.Status.ISSUED).values("payment__invoice").annotate(total=Sum("amount")).values("total")
+    adjustments_sum = Adjustment.objects.filter(invoice=OuterRef("pk")).values("invoice").annotate(total=Sum("amount")).values("total")
+
+    invoices = Invoice.objects.select_related("patient").annotate(
+        paid_sum=Coalesce(Subquery(payments_sum), Decimal("0.00")),
+        refunded_sum=Coalesce(Subquery(refunds_sum), Decimal("0.00")),
+        adjusted_sum=Coalesce(Subquery(adjustments_sum), Decimal("0.00")),
+    ).order_by("-created_at")
+
     query = request.GET.get("q", "").strip()
     if query:
         invoices = invoices.filter(
@@ -431,7 +440,7 @@ def invoice_list(request):
         )
     invoices = list(invoices)
     for invoice in invoices:
-        invoice.balance = _invoice_outstanding(invoice)
+        invoice.balance = invoice.total + invoice.adjusted_sum - invoice.paid_sum + invoice.refunded_sum
     return render(
         request,
         "core/billing/invoice_list.html",

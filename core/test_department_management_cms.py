@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase, override_settings
-from django.urls import reverse
 
 from core.models import Department, StaffProfile
 from core.roles import configure_role_permissions

@@ -2,7 +2,6 @@ from datetime import date, timedelta
 from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 

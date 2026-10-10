@@ -1,11 +1,8 @@
-from datetime import timedelta
-from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import Client, TestCase, override_settings
-from django.utils import timezone
 
 from core.models import Patient, PatientAccount
 

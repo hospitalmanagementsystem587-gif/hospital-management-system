@@ -3,7 +3,7 @@ from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 
-from core.models import Department, Patient, PatientAccount, StaffProfile, Ticket, TicketAuditEvent
+from core.models import Department, Patient, PatientAccount, StaffProfile, Ticket
 from core.services.ticketing import create_patient_ticket, ticket_history_for_user
 
 User = get_user_model()
