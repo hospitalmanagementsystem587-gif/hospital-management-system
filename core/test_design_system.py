@@ -5,7 +5,6 @@ from django.contrib.auth.models import Group
 from django.core.paginator import Paginator
 from django.test import RequestFactory, TestCase, override_settings
 from django.template.loader import render_to_string
-from django.utils import timezone
 
 from core.context_processors import hospital_context
 from core.models import HospitalSettings, Patient, PatientAccount, StaffProfile

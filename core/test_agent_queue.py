@@ -1,10 +1,10 @@
 from datetime import timedelta
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group, Permission
+from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Department, Patient, PatientAccount, StaffProfile, Ticket, TicketMessage
+from core.models import Department, Patient, PatientAccount, StaffProfile, Ticket
 from core.roles import configure_role_permissions
 from core.services.ticketing import agent_tickets_queryset
 

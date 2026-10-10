@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase, override_settings
 
 from core.forms import PriceForm
-from core.models import DiagnosticTest, HealthPackage, Price, Service, StaffProfile, Ward
+from core.models import Price, Service, StaffProfile, Ward
 from core.roles import configure_role_permissions
 
 User = get_user_model()

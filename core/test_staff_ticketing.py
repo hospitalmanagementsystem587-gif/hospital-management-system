@@ -1,4 +1,3 @@
-import io
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -12,7 +11,6 @@ from core.models import (
     StaffProfile,
     Ticket,
     TicketAttachment,
-    TicketMessage,
 )
 from core.roles import configure_role_permissions
 from core.services.ticketing import create_staff_ticket, staff_tickets_queryset

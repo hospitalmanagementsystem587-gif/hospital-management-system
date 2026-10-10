@@ -1,9 +1,8 @@
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone

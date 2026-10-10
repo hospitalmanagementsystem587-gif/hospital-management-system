@@ -1,9 +1,6 @@
 import hashlib
-import os
-import tempfile
 from decimal import Decimal
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.cache import cache
@@ -14,8 +11,6 @@ from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from core.authorization import (
-    PORTAL_ALLOWED_GROUPS,
-    doctor_patient_queryset,
     get_authorized_appointment_queryset,
     get_authorized_patient_queryset,
     user_can_access_portal,
@@ -27,19 +22,13 @@ from core.models import (
     Consultation,
     Department,
     Invoice,
-    InvoiceLine,
-    Medicine,
-    MedicineBatch,
     Patient,
     PatientAccount,
     PatientDocument,
-    Payment,
     PaymentMethod,
     Prescription,
-    PrescriptionItem,
     Service,
     StaffProfile,
-    Supplier,
     VisitType,
     Ward,
 )

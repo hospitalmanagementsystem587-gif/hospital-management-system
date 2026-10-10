@@ -13,7 +13,6 @@ from core.models import (
     PatientAccount,
     Payment,
     PaymentMethod,
-    Refund,
 )
 from core.roles import configure_role_permissions
 

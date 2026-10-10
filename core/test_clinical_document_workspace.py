@@ -1,6 +1,4 @@
 import hashlib
-import io
-import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group

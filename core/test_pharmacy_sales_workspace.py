@@ -11,7 +11,6 @@ from django.utils import timezone
 from core.models import (
     AuditEvent,
     Invoice,
-    InvoiceLine,
     Medicine,
     MedicineBatch,
     NumberSequence,

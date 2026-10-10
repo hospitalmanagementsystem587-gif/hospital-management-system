@@ -21,14 +21,12 @@ from core.models import (
     PatientDocument,
     PatientFeedback,
     Payment,
-    PaymentMethod,
     Prescription,
     PrescriptionItem,
     Refund,
     StaffProfile,
     VisitType,
 )
-from core.forms import appointment_slot_conflicts
 
 
 class PatientProfileSerializer(serializers.ModelSerializer):

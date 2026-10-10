@@ -6,7 +6,6 @@ from django.utils import timezone
 from core.models import (
     Appointment,
     AuditEvent,
-    Consultation,
     NumberSequence,
     Patient,
     StaffProfile,

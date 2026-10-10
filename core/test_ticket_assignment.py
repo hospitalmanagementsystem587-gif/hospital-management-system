@@ -1,9 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase
-from django.utils import timezone
 
-from core.models import Department, StaffProfile, Ticket, TicketMessage
+from core.models import Department, StaffProfile, Ticket
 
 User = get_user_model()
 

@@ -1,6 +1,5 @@
 import hashlib
 from datetime import timedelta
-import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group

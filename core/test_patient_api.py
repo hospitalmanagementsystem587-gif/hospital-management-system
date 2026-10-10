@@ -10,9 +10,7 @@ from unittest import skipIf
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from decimal import Decimal
 from core.models import (
-    Adjustment,
     Department,
     Invoice,
     InvoiceLine,
@@ -20,7 +18,6 @@ from core.models import (
     PatientAccount,
     Payment,
     PaymentMethod,
-    Refund,
     StaffProfile,
     VisitType,
     Appointment,
@@ -951,7 +948,6 @@ class PatientApiTests(TransactionTestCase):
         self.assertEqual(self.client.get("/api/v1/me/medication-schedules/").data, [])
 
     def test_patient_verified_feedback_and_moderation(self):
-        from core.models import PatientFeedback
         from django.contrib.auth.models import Permission
 
         # 1. Create a completed appointment for Patient 1

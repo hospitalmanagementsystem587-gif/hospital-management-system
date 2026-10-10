@@ -8,7 +8,6 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core.models import (
-    AuditEvent,
     Medicine,
     MedicineBatch,
     StaffProfile,

@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from core.models import Invoice, PatientAccount, Payment, StaffProfile, Ticket, TicketAttachment, TicketAuditEvent, TicketMessage
+from core.models import Invoice, PatientAccount, StaffProfile, Ticket, TicketAttachment, TicketAuditEvent, TicketMessage
 from core.services.documents import inspect_patient_document_upload, open_validated_patient_document
 
 

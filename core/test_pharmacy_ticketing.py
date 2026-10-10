@@ -1,6 +1,5 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client
 from django.urls import reverse
 
@@ -8,10 +7,8 @@ from core.models import (
     Department,
     Patient,
     PatientAccount,
-    Prescription,
     StaffProfile,
     Ticket,
-    TicketAttachment,
 )
 from core.roles import configure_role_permissions
 from core.services.ticketing import (

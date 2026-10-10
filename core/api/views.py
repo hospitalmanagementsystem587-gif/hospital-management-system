@@ -13,7 +13,6 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from core.models import (
-    Adjustment,
     Appointment,
     AuditEvent,
     Consultation,
@@ -27,12 +26,10 @@ from core.models import (
     Bed,
     HospitalSettings,
     Invoice,
-    InvoiceLine,
     PatientDocument,
     PatientFeedback,
     Payment,
     Prescription,
-    Refund,
     MedicationSchedule,
     MedicationDoseLog,
     StaffProfile,

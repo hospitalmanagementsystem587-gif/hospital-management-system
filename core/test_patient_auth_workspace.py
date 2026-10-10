@@ -4,7 +4,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
-from django.urls import reverse
 from django.utils import timezone
 
 from core.models import Patient, PatientAccount, StaffProfile
